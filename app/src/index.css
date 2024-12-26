@@ -1,0 +1,53 @@
+:root {
+  --background: #ffffff;
+  --text: #111111;
+  --primary: #3b82f6;
+  --secondary: #f3f4f6;
+  --card: #ffffff;
+  --border: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] {
+  --background: #111111;
+  --text: #ffffff;
+  --primary: #3b82f6;
+  --secondary: #1c1c1c;
+  --card: #1c1c1c;
+  --border: rgba(255, 255, 255, 0.1);
+}
+
+:root,
+html {
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light dark;
+  color: var(--text);
+  background-color: var(--background);
+  transition: all 0.3s ease;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-style: normal;
+  font-variation-settings: 'slnt' 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-smooth: never;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.modal-content {
+  background-color: var(--card) !important;
+}
