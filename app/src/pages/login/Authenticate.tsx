@@ -5,6 +5,7 @@ import { clearAppEndpoint, clearApplicationId } from '../../utils/storage';
 import { getNodeUrl, getStorageApplicationId } from '../../utils/node';
 import { styled } from 'styled-components';
 import ContentWrapper from '../../components/login/ContentWrapper';
+import {  setNodeUrl } from '../../utils/node';
 
 const Wrapper = styled.div`
   display: flex;
@@ -59,6 +60,10 @@ export default function Authenticate() {
     clearApplicationId();
     navigate('/');
   }
+  const handleSetNodeUrl = (url: string) => {
+    setNodeUrl(url);
+    return url;
+  };
 
   return (
     <ContentWrapper>
@@ -70,8 +75,9 @@ export default function Authenticate() {
             </div>
             <ClientLogin
               getNodeUrl={getNodeUrl}
+              setNodeUrl={handleSetNodeUrl}
               getApplicationId={getStorageApplicationId}
-              sucessRedirect={() => navigate('/home')}
+              sucessRedirect={() => navigate('/role-selection')}
             />
           </div>
           <div className="back-button" onClick={onSetupClick}>

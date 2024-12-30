@@ -20,7 +20,8 @@ pub trait IConsentManagement<TContractState> {
         self: @TContractState,
         patient_id: felt252,
         entity_id: felt252,
-        purpose: felt252
+        purpose: felt252,
+        timestamp: felt252
     ) -> bool;
     fn revoke_consent(
         ref self: TContractState,
@@ -45,9 +46,8 @@ pub trait IDataAccessLogging<TContractState> {
 
 #[starknet::interface]
 pub trait IRewardPool<TContractState> {
-    fn deposit_reward(ref self: TContractState, entity_id: felt252, usd_amount: u256);
-    fn withdraw_reward(ref self: TContractState, entity_id: felt252, amount: u256);
-    fn get_token_price(self: @TContractState) -> u128;
+    fn deposit_reward(ref self: TContractState, entity_id: felt252, eth_amount: u256);
+    fn withdraw_reward(ref self: TContractState, entity_id: felt252, eth_amount: u256);
 }
 
 
@@ -98,9 +98,7 @@ mod health_data {
         get_block_number,
         get_contract_address
     };
-
-    use pragma_lib::abi::{IPragmaABIDispatcher, IPragmaABIDispatcherTrait};
-    use pragma_lib::types::DataType;
+    use core::pedersen;
     use openzeppelin::token::erc20::interface::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
     const TOKEN_USD: felt252 = 19514442401534788;
     const DECIMAL_FACTOR: u256 = 100000000;
@@ -233,96 +231,100 @@ fn constructor(ref self: ContractState, initial_owner: ContractAddress) {
             self: @ContractState,
             patient_id: felt252,
             entity_id: felt252,
-            purpose: felt252
+            purpose: felt252,
+            timestamp: felt252
         ) -> bool {
-            // Get consent directly
+            // Get stored consent
             let consent = self.consents.read((patient_id, entity_id));
             
-            // Early return if no consent exists
+            // Verify consent exists
             if consent.patient_id == 0 {
                 return false;
             }
         
-            // Validate purpose and expiration
+            // Verify timestamp and expiration
             let current_timestamp = get_block_timestamp();
-            let purpose_valid = consent.purpose == purpose;
-            
             let expiration_valid = match consent.expiration {
                 Expiration::Finite(exp_time) => current_timestamp <= exp_time,
                 Expiration::Infinite => true
             };
+        
+            // Recompute proof hash chain
+            let proof = pedersen::pedersen(
+                pedersen::pedersen(
+                    pedersen::pedersen(patient_id, entity_id),
+                    purpose
+                ),
+                timestamp
+            );
             
-            purpose_valid && expiration_valid
+            // Verify all conditions
+            let proof_matches = proof == consent.proof;
+            let purpose_valid = consent.purpose == purpose;
+        
+            purpose_valid && expiration_valid && proof_matches 
         }
         fn revoke_consent(
             ref self: ContractState,
             patient_id: felt252,
             entity_id: felt252
         ) {
-            self.ensure_owner();
-            // self.consents.remove((patient_id, entity_id));
+            
+            let empty_consent = Consent {
+                patient_id: 0,
+                entity_id: 0,
+                purpose: 0,
+                proof: 0,
+                expiration: Expiration::Infinite,
+            };
+            self.consents.write((patient_id, entity_id), empty_consent);
         }
         }
     
      #[abi(embed_v0)]
     impl RewardPool of IRewardPool<ContractState> {
-        fn deposit_reward(ref self: ContractState, entity_id: felt252, usd_amount: u256) {
-            self.ensure_owner();
-            
-            // Get token price in USD
-            let token_price = self.get_token_price().into();
-            
-            // Calculate token amount
-            let token_amount = (usd_amount * DECIMAL_FACTOR) / token_price;
-            
-            // Transfer tokens
+        fn deposit_reward(ref self: ContractState, entity_id: felt252, eth_amount: u256) {
+            // Transfer ETH tokens directly
             let token = ERC20ABIDispatcher {
                 contract_address: 0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7.try_into().unwrap()
-        
             };
             
             let caller = get_caller_address();
-            token.transfer_from(caller, get_contract_address(), token_amount);
-           
+            token.transfer_from(caller, get_contract_address(), eth_amount);
             
-            // Update balances
+            // Update balances - store the ETH amount directly
             let current = self.rewards.read(entity_id);
-            self.rewards.write(entity_id, current + token_amount);
+            self.rewards.write(entity_id, current + eth_amount);
             
+            // Emit event with ETH amount
             self.emit(Event::RewardDeposited(RewardDeposited {
                 entity_id,
-                amount: token_amount
+                amount: eth_amount
             }));
         }
 
-        fn withdraw_reward(ref self: ContractState, entity_id: felt252, amount: u256) {
+        fn withdraw_reward(ref self: ContractState, entity_id: felt252, eth_amount: u256) {
+            // Check balance
             let current = self.rewards.read(entity_id);
-            assert(current >= amount, 'Insufficient balance');
+            assert(current >= eth_amount, 'Insufficient balance');
             
-            // Transfer tokens
+            // Get ETH token contract
             let token = ERC20ABIDispatcher {
                 contract_address: 0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7.try_into().unwrap()
             };
             
+            // Transfer ETH tokens to caller
             let recipient = get_caller_address();
-            token.transfer(recipient, amount);
+            token.transfer(recipient, eth_amount);
             
             // Update balance
-            self.rewards.write(entity_id, current - amount);
+            self.rewards.write(entity_id, current - eth_amount);
             
+            // Emit withdrawal event
             self.emit(Event::RewardWithdrawn(RewardWithdrawn {
                 entity_id,
-                amount
+                amount: eth_amount
             }));
-        }
-
-        fn get_token_price(self: @ContractState) -> u128 {
-            let oracle = IPragmaABIDispatcher {
-                contract_address: self.pragma_contract.read()
-            };
-            
-            let response = oracle.get_data_median(DataType::SpotEntry(TOKEN_USD));
-            response.price
         }
     }
 

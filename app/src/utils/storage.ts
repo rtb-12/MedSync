@@ -4,6 +4,7 @@ export const APP_URL = 'app-url';
 export const CONTEXT_IDENTITY = 'context-identity';
 export const CONTEXT_ID = 'context-id';
 export const APPLICATION_ID = 'application-id';
+export const NODE_URL_KEY = 'user-node-url';
 
 export const getStorageAppEndpointKey = (): string | null => {
   try {
@@ -101,4 +102,22 @@ export const getJWTObject = (): JsonWebToken | null => {
 
 export const getJWT = (): string | null => {
   return getAccessToken();
+};
+
+export const setUserNodeUrl = (url: string) => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.setItem(NODE_URL_KEY, JSON.stringify(url));
+  }
+};
+
+export const getUserNodeUrl = (): string | null => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const storedUrl = localStorage.getItem(NODE_URL_KEY);
+      return storedUrl ? JSON.parse(storedUrl) : null;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
 };

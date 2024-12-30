@@ -53,7 +53,7 @@ const ContentInner = styled.div`
 `;
 
 const Title = styled.h1`
-  font-size: 3rem;
+  font-size: 5rem;
   font-weight: bold;
   background: linear-gradient(to right, #60a5fa, #a855f7, #ec4899);
   -webkit-background-clip: text;
@@ -73,7 +73,7 @@ const Description = styled.p<{ theme: 'light' | 'dark' }>`
 
 const ButtonGrid = styled.div`
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 2fr;
   gap: 1.5rem;
   margin-top: 3rem;
   
@@ -122,6 +122,55 @@ const ButtonContent = styled.div<{ theme: 'light' | 'dark' }>`
     color: ${({ theme }) => theme === 'light' ? '#6b7280' : '#9ca3af'};
   }
 `;
+const FeatureGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin-top: 4rem;
+  
+  @media (max-width: 1280px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+`;
+const FeatureCard = styled.div<{ theme: 'light' | 'dark' }>`
+  background: ${({ theme }) => theme === 'light' ? '#ffffff' : '#1f2937'};
+  border-radius: 1rem;
+  padding: 2rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  border: 1px solid ${({ theme }) =>
+    theme === 'light' ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)'};
+
+  &:hover {
+    transform: translateY(-4px);
+  }
+
+  h3 {
+    color: ${({ theme }) => theme === 'light' ? '#111111' : '#ffffff'};
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    background: linear-gradient(to right, #60a5fa, #a855f7);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  p {
+    color: ${({ theme }) => theme === 'light' ? '#4b5563' : '#9ca3af'};
+    line-height: 1.6;
+  }
+`;
+
+const Icon = styled.div`
+  font-size: 2rem;
+  margin-bottom: 1rem;
+`;
+
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -149,27 +198,49 @@ export default function HomePage() {
       <Content>
         <GradientBackground theme={theme} />
         <ContentInner>
-          <Title>Healthcare Data Platform</Title>
+          <Title>MedSync Platform</Title>
           <Description theme={theme}>
-            Secure and private health data management system. Access and manage medical records,
-            control data sharing permissions, and maintain privacy of sensitive information.
+            A decentralized healthcare data management system powered by Starknet and Calimero, 
+            ensuring security, privacy, and seamless interoperability in healthcare data sharing.
           </Description>
-
-          <ButtonGrid>
-            <PortalButton onClick={() => navigate('/patient')}>
-              <ButtonContent theme={theme}>
-                <h3>Patient Portal</h3>
-                <p>Manage your health records and access permissions</p>
-              </ButtonContent>
-            </PortalButton>
-
-            <PortalButton variant="hospital" onClick={() => navigate('/hospital')}>
-              <ButtonContent theme={theme}>
-                <h3>Hospital Portal</h3>
-                <p>Access authorized patient records and request permissions</p>
-              </ButtonContent>
-            </PortalButton>
-          </ButtonGrid>
+  
+          <FeatureGrid>
+            <FeatureCard theme={theme}>
+              <Icon>🔐</Icon>
+              <h3>Decentralized Consent</h3>
+              <p>Grant or revoke data access permissions with verifiable proofs ensuring authenticity.</p>
+            </FeatureCard>
+  
+            <FeatureCard theme={theme}>
+              <Icon>📊</Icon>
+              <h3>Data Access Logging</h3>
+              <p>Track and audit all data access requests with complete transparency.</p>
+            </FeatureCard>
+  
+            <FeatureCard theme={theme}>
+              <Icon>💎</Icon>
+              <h3>Reward Mechanism</h3>
+              <p>Earn rewards for sharing medical data with research institutions.</p>
+            </FeatureCard>
+  
+            <FeatureCard theme={theme}>
+              <Icon>🛡️</Icon>
+              <h3>Zero-Knowledge Proofs</h3>
+              <p>Validate consent without exposing sensitive information, ensuring GDPR compliance.</p>
+            </FeatureCard>
+  
+            <FeatureCard theme={theme}>
+              <Icon>⚡</Icon>
+              <h3>Starknet-Powered</h3>
+              <p>Fast, secure, and low-cost transactions with L2 blockchain technology.</p>
+            </FeatureCard>
+  
+            <FeatureCard theme={theme}>
+              <Icon>🔒</Icon>
+              <h3>Private Network</h3>
+              <p>Secure operations on Calimero nodes for sensitive medical data.</p>
+            </FeatureCard>
+          </FeatureGrid>
         </ContentInner>
       </Content>
     </Container>

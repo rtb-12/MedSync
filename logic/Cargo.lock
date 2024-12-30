@@ -209,6 +209,7 @@ dependencies = [
  "borsh",
  "calimero-sdk",
  "calimero-storage",
+ "hex",
  "serde",
  "serde_json",
 ]

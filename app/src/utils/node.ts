@@ -6,11 +6,18 @@ import {
   setStorageAppEndpointKey,
   setStorageApplicationId,
   setStorageContextId,
+  getUserNodeUrl, setUserNodeUrl
 } from './storage';
 
 export function getNodeUrl(): string {
-  let storageKey = getStorageAppEndpointKey();
+  // First check for user-entered URL
+  const userUrl = getUserNodeUrl();
+  if (userUrl) {
+    return userUrl;
+  }
 
+  // Fall back to storage or env if no user URL
+  let storageKey = getStorageAppEndpointKey();
   if (!storageKey) {
     let envKey: string = import.meta.env['VITE_NODE_URL'] ?? '';
     setStorageAppEndpointKey(envKey);
@@ -19,6 +26,11 @@ export function getNodeUrl(): string {
 
   return storageKey ?? '';
 }
+
+export function setNodeUrl(url: string): void {
+  setUserNodeUrl(url);
+}
+
 
 export function getContextId(): string {
   let storageContextId = getStorageContextId();

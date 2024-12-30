@@ -4,6 +4,27 @@ import styled from 'styled-components';
 import { PatientRecord } from '../types/HealthTypes';
 import { useTheme } from '../contexts/ThemeContext';
 
+interface PatientRecord {
+  data: string;  // This contains the JSON string of medical details
+  timestamp: number;
+  record_type: string;
+  owner_id: string;
+  authorized_ids: string[];
+  is_anonymized: boolean;
+}
+
+interface MedicalDetails {
+  diagnosis: string;
+  medications: string[];
+  testResults: string[];
+  notes: string;
+  symptoms: string[];
+  recordType: string;
+  date: string;
+  doctorName: string;
+}
+
+
 const RecordGrid = styled.div`
   display: grid;
   gap: 1.5rem;
@@ -98,45 +119,142 @@ const RecordCard = styled(Card)<{ theme: 'light' | 'dark' }>`
       }
     }
   }
+    .detail-section {
+    margin: 1rem 0;
+    padding: 0.75rem;
+    background: ${({ theme }) => 
+      theme === 'light' 
+        ? 'rgba(0, 0, 0, 0.02)' 
+        : 'rgba(255, 255, 255, 0.05)'};
+    border-radius: 0.5rem;
+
+    h5 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: ${({ theme }) => 
+        theme === 'light' ? '#111111' : '#ffffff'};
+    }
+
+    ul {
+      list-style: disc;
+      margin-left: 1.5rem;
+      
+      li {
+        margin: 0.25rem 0;
+        color: ${({ theme }) => 
+          theme === 'light' ? '#374151' : '#9ca3af'};
+      }
+    }
+
+    p {
+      color: ${({ theme }) => 
+        theme === 'light' ? '#374151' : '#9ca3af'};
+    }
+  }
 `;
 
 export function RecordList({ records, onDelete }: Props) {
   const { theme } = useTheme();
 
+  const parseMedicalDetails = (data: string): MedicalDetails | null => {
+    try {
+      return JSON.parse(data);
+    } catch (err) {
+      console.error('Failed to parse medical details:', err);
+      return null;
+    }
+  };
+
+
   return (
     <Card theme={theme}>
-       <StyledHeading>Health Records</StyledHeading>
+      <StyledHeading>Health Records</StyledHeading>
       <RecordGrid>
-        {records.map((record) => (
-          <RecordCard key={`${record.owner_id}-${record.timestamp}`} theme={theme}>
-            <div className="record-header">
-              <h4>{record.record_type}</h4>
-            </div>
-            
-            <div className="record-data">
-              <strong>Data:</strong> {record.data}
-            </div>
-            
-            <div className="record-meta">
-              <p><strong>Created:</strong> {new Date(record.timestamp).toLocaleString()}</p>
-              <p><strong>Owner ID:</strong> {record.owner_id}</p>
-              <p><strong>Status:</strong> {record.is_anonymized ? 'Anonymized' : 'Private'}</p>
+        {records.map((record) => {
+          const medicalDetails = parseMedicalDetails(record.data);
+          
+          return (
+            <RecordCard key={`${record.owner_id}-${record.timestamp}`} theme={theme}>
+              <div className="record-header">
+                <h4>{medicalDetails?.recordType || record.record_type}</h4>
+              </div>
               
-              {record.authorized_ids.length > 0 && (
-                <p>
-                  <strong>Authorized Users:</strong>{' '}
-                  {record.authorized_ids.join(', ')}
-                </p>
-              )}
-            </div>
+              <div className="record-details">
+                {medicalDetails && (
+                  <>
+                    {medicalDetails.diagnosis && (
+                      <div className="detail-section">
+                        <h5>Diagnosis</h5>
+                        <p>{medicalDetails.diagnosis}</p>
+                      </div>
+                    )}
 
-            <div className="record-actions">
-              <Button onClick={() => onDelete(record.owner_id)}>
-                Delete
-              </Button>
-            </div>
-          </RecordCard>
-        ))}
+                    {medicalDetails.medications.length > 0 && (
+                      <div className="detail-section">
+                        <h5>Medications</h5>
+                        <ul>
+                          {medicalDetails.medications.map((med, idx) => (
+                            <li key={idx}>{med}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {medicalDetails.testResults.length > 0 && (
+                      <div className="detail-section">
+                        <h5>Test Results</h5>
+                        <ul>
+                          {medicalDetails.testResults.map((result, idx) => (
+                            <li key={idx}>{result}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {medicalDetails.symptoms.length > 0 && (
+                      <div className="detail-section">
+                        <h5>Symptoms</h5>
+                        <ul>
+                          {medicalDetails.symptoms.map((symptom, idx) => (
+                            <li key={idx}>{symptom}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {medicalDetails.notes && (
+                      <div className="detail-section">
+                        <h5>Notes</h5>
+                        <p>{medicalDetails.notes}</p>
+                      </div>
+                    )}
+
+                    <div className="detail-section">
+                      <h5>Visit Details</h5>
+                      <p><strong>Date:</strong> {medicalDetails.date}</p>
+                      {medicalDetails.doctorName && (
+                        <p><strong>Doctor:</strong> {medicalDetails.doctorName}</p>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+              
+              <div className="record-meta">
+                <p><strong>Created:</strong> {new Date(record.timestamp).toLocaleString()}</p>
+                <p><strong>Status:</strong> {record.is_anonymized ? 'Anonymized' : 'Private'}</p>
+                {record.authorized_ids.length > 0 && (
+                  <p><strong>Authorized Users:</strong> {record.authorized_ids.join(', ')}</p>
+                )}
+              </div>
+
+              <div className="record-actions">
+                <Button onClick={() => onDelete(record.owner_id)}>Delete</Button>
+              </div>
+            </RecordCard>
+          );
+        })}
         
         {records.length === 0 && (
           <p className={`text-center ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>

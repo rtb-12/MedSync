@@ -17,11 +17,21 @@ export interface GrantConsentRequest {
 export enum ClientMethod {
   GET_PATIENT_RECORDS = 'get_patient_data',
   STORE_PATIENT_DATA = 'store_patient_data',
-  GET_AUTHORIZED_RECORDS = 'get_authorized_records',
-  REQUEST_ACCESS = 'request_access',
-  GRANT_ACCESS = 'grant_access',
+  ADD_CONSENT = 'add_consent',
+  ACCESS_PATIENT_DATA = 'access_patient_data',
+  LIST_AUTHORIZED_REPORTS = 'list_authorized_reports',
+  CREATE_RESEARCH_POOL = 'create_research_pool',
+  GET_RESEARCH_POOL = 'get_research_pool',
   REVOKE_ACCESS = 'revoke_access',
-  REMOVE_RECORD = 'remove_record'
+  DELETE_PATIENT_DATA = 'delete_patient_data',
+  UPDATE_RESEARCH_POOL = 'update_research_pool',
+  DELETE_RESEARCH_POOL = 'delete_research_pool',
+  UPDATE_PATIENT_DATA = 'update_patient_data',
+  LIST_RESEARCH_POOLS = 'list_research_pools',
+  UPDATE_SUBMISSION_STATUS = 'update_submission_status',
+  GET_POOL_SUBMISSIONS    = 'get_pool_submissions',
+  SUBMIT_TO_POOL = 'submit_to_pool',
+
 }
 
 export interface ClientApi {

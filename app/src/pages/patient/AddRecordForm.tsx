@@ -8,6 +8,17 @@ interface Props {
   onRecordAdded: () => void;
 }
 
+interface HealthRecordDetails {
+  diagnosis: string;
+  medications: string[];
+  testResults: string[];
+  notes: string;
+  symptoms: string[];
+  recordType: string;
+  date: string;
+  doctorName: string;
+}
+
 const FormCard = styled(Card)<{ theme: 'light' | 'dark' }>`
   background: ${({ theme }) => 
     theme === 'light' 
@@ -74,21 +85,83 @@ const SubmitButton = styled(Button)`
   }
 `;
 
+const InputGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+`;
+
+const InputGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+`;
+
+const Label = styled.label<{ theme: 'light' | 'dark' }>`
+  color: ${({ theme }) => theme === 'light' ? '#374151' : '#e5e7eb'};
+  font-size: 0.875rem;
+  font-weight: 500;
+`;
+
+const TextArea = styled(StyledInput).attrs({ as: 'textarea' })`
+  min-height: 100px;
+  resize: vertical;
+`;
+
+const TagInput = styled(StyledInput)`
+  &::placeholder {
+    color: ${({ theme }) => theme === 'light' ? '#9ca3af' : '#6b7280'};
+  }
+`;
+
 export function AddRecordForm({ onRecordAdded }: Props) {
-  const [data, setData] = useState('');
-  const [recordType, setRecordType] = useState('');
+  const [recordDetails, setRecordDetails] = useState<HealthRecordDetails>({
+    diagnosis: '',
+    medications: [],
+    testResults: [],
+    notes: '',
+    symptoms: [],
+    recordType: '',
+    date: new Date().toISOString().split('T')[0],
+    doctorName: ''
+  });
+  const [tempMedication, setTempMedication] = useState('');
+  const [tempSymptom, setTempSymptom] = useState('');
+  const [tempTestResult, setTempTestResult] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { theme } = useTheme();
   const api = new HealthDataApi();
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleAddItem = (field: keyof HealthRecordDetails, value: string) => {
+    if (!value.trim()) return;
+    
+    setRecordDetails(prev => ({
+      ...prev,
+      [field]: Array.isArray(prev[field]) ? [...prev[field], value] : prev[field]
+    }));
+  };
+
+  const handleRemoveItem = (field: keyof HealthRecordDetails, index: number) => {
+    setRecordDetails(prev => ({
+      ...prev,
+      [field]: Array.isArray(prev[field]) 
+        ? prev[field].filter((_, i) => i !== index) 
+        : prev[field]
+    }));
+  };
+
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
+      // Convert record details to JSON string before encrypting
+      const jsonData = JSON.stringify(recordDetails);
       const result = await api.storePatientData(
-        new TextEncoder().encode(data),
-        recordType,
+        new TextEncoder().encode(jsonData),
+        recordDetails.recordType
       );
 
       if (result.error) {
@@ -96,8 +169,17 @@ export function AddRecordForm({ onRecordAdded }: Props) {
         return;
       }
 
-      setData('');
-      setRecordType('');
+      // Reset form
+      setRecordDetails({
+        diagnosis: '',
+        medications: [],
+        testResults: [],
+        notes: '',
+        symptoms: [],
+        recordType: '',
+        date: new Date().toISOString().split('T')[0],
+        doctorName: ''
+      });
       onRecordAdded();
     } catch (err) {
       console.error('Failed to add record:', err);
@@ -105,26 +187,113 @@ export function AddRecordForm({ onRecordAdded }: Props) {
     } finally {
       setIsLoading(false);
     }
-  }
+  };
 
   return (
     <FormCard theme={theme}>
       <h3>Add New Health Record</h3>
       <form onSubmit={handleSubmit}>
-        <StyledInput
-          theme={theme}
-          value={data}
-          onChange={(e) => setData(e.target.value)}
-          placeholder="Enter health record data"
-          required
-        />
-        <StyledInput
-          theme={theme}
-          value={recordType}
-          onChange={(e) => setRecordType(e.target.value)}
-          placeholder="Record type (e.g., Blood Test, X-Ray)"
-          required
-        />
+        <InputGrid>
+          <InputGroup>
+            <Label theme={theme}>Record Type</Label>
+            <StyledInput
+              theme={theme}
+              value={recordDetails.recordType}
+              onChange={(e) => setRecordDetails(prev => ({ ...prev, recordType: e.target.value }))}
+              placeholder="e.g., Blood Test, X-Ray"
+              required
+            />
+          </InputGroup>
+          
+          <InputGroup>
+            <Label theme={theme}>Date</Label>
+            <StyledInput
+              theme={theme}
+              type="date"
+              value={recordDetails.date}
+              onChange={(e) => setRecordDetails(prev => ({ ...prev, date: e.target.value }))}
+              required
+            />
+          </InputGroup>
+        </InputGrid>
+
+        <InputGroup>
+          <Label theme={theme}>Diagnosis</Label>
+          <TextArea
+            theme={theme}
+            value={recordDetails.diagnosis}
+            onChange={(e) => setRecordDetails(prev => ({ ...prev, diagnosis: e.target.value }))}
+            placeholder="Enter diagnosis details"
+            required
+          />
+        </InputGroup>
+
+        <InputGroup>
+          <Label theme={theme}>Medications</Label>
+          <div>
+            <TagInput
+              theme={theme}
+              value={tempMedication}
+              onChange={(e) => setTempMedication(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddItem('medications', tempMedication);
+                  setTempMedication('');
+                }
+              }}
+              placeholder="Type medication and press Enter"
+            />
+            {recordDetails.medications.map((med, index) => (
+              <Button
+                key={index}
+                onClick={() => handleRemoveItem('medications', index)}
+                type="button"
+              >
+                {med} ×
+              </Button>
+            ))}
+          </div>
+        </InputGroup>
+
+        <InputGroup>
+          <Label theme={theme}>Test Results</Label>
+          <div>
+            <TagInput
+              theme={theme}
+              value={tempTestResult}
+              onChange={(e) => setTempTestResult(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddItem('testResults', tempTestResult);
+                  setTempTestResult('');
+                }
+              }}
+              placeholder="Type test result and press Enter"
+            />
+            {recordDetails.testResults.map((result, index) => (
+              <Button
+                key={index}
+                onClick={() => handleRemoveItem('testResults', index)}
+                type="button"
+              >
+                {result} ×
+              </Button>
+            ))}
+          </div>
+        </InputGroup>
+
+        <InputGroup>
+          <Label theme={theme}>Notes</Label>
+          <TextArea
+            theme={theme}
+            value={recordDetails.notes}
+            onChange={(e) => setRecordDetails(prev => ({ ...prev, notes: e.target.value }))}
+            placeholder="Additional notes"
+          />
+        </InputGroup>
+
         <SubmitButton type="submit" disabled={isLoading}>
           {isLoading ? 'Adding...' : 'Add Record'}
         </SubmitButton>

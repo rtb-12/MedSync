@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
 import { AddRecordForm } from './AddRecordForm';
 import { ConsentManager } from '../../components/ConsentManager';
@@ -8,6 +8,8 @@ import { PatientRecord } from '../../types/HealthTypes';
 import ErrorMessage from '../../components/ErrorMessage';
 import { LoadingState } from '../../components/shared/LoadingState';
 import { useTheme } from '../../contexts/ThemeContext';
+
+
 
 const DashboardWrapper = styled.div<{ theme: 'light' | 'dark' }>`
   padding: 6rem 2rem 2rem;
@@ -59,6 +61,7 @@ export default function PatientDashboard() {
   const [error, setError] = useState<string | null>(null);
   const { theme } = useTheme();
   const api = new HealthDataApi();
+
 
   const fetchRecords = useCallback(async () => {
     setIsLoading(true);
