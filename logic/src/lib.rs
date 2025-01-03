@@ -36,6 +36,7 @@ pub struct ResearchPool {
     reward_amount: u64,
     entity_id: String,
     created_at: u64,
+    expiry_date: u64,
     status: String,
 }
 
@@ -43,15 +44,25 @@ pub struct ResearchPool {
 pub struct PatientDataResponse {
     data: Vec<u8>,
     record_type: String,
-    timestamp: u64
+    timestamp: u64,
+    owner_id: String
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, Default)]
+#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, Default, Debug)]
 pub struct PoolSubmission {
     patient_id: String,
     entity_id: String,
     submitted_at: u64,
-    status: String, // "pending", "accepted", "rejected"
+    status: String, 
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SubmissionWithPool {
+    submission: PoolSubmission,
+    pool_title: String,
+    pool_description: String,
+    reward_amount: u64,
+    expiry_date: u64
 }
 
 #[app::event]
@@ -60,7 +71,7 @@ pub enum HealthEvent<'a> {
     AccessGranted { patient_id: &'a str, provider_id: &'a str },
     RecordAccessed { patient_id: &'a str, accessor_id: &'a str },
     ConsentGranted { patient_id: &'a str, entity_id: &'a str },
-    PoolCreated { entity_id: &'a str, title: &'a str, reward_amount: u64 },
+    PoolCreated { entity_id: &'a str, title: &'a str, reward_amount: u64 , expiry_date: u64 },
     RecordDeleted { patient_id: &'a str },
     PoolDeleted { entity_id: &'a str, title: &'a str },
     RecordUpdated { patient_id: &'a str },
@@ -160,7 +171,6 @@ impl HealthDataStore {
                 return Ok(None);
             }
 
-            // Return encrypted data if authorized
             if let Some(record) = self.records.get(patient_id)? {
                 if record.authorized_ids.contains(&entity_id.to_string()) {
                     app::emit!(HealthEvent::RecordAccessed { 
@@ -241,7 +251,8 @@ impl HealthDataStore {
                 return Ok(Some(PatientDataResponse {
                     data: record.data,
                     record_type: record.record_type,
-                    timestamp: record.timestamp
+                    timestamp: record.timestamp,
+                    owner_id: record.owner_id
                 }));
             }
             env::log(&format!("Access denied for entity: {} to patient data: {}", entity_id, patient_id));
@@ -279,6 +290,7 @@ impl HealthDataStore {
         title: String,
         description: String,
         reward_amount: u64,
+        expiry_date: u64
     ) -> Result<(), Error> {
         env::log(&format!("Creating research pool: {} by entity: {}", title, entity_id));
 
@@ -288,6 +300,7 @@ impl HealthDataStore {
             reward_amount,
             entity_id: entity_id.clone(),
             created_at: env::time_now(),
+            expiry_date,
             status: "active".to_string(),
         };
 
@@ -296,7 +309,8 @@ impl HealthDataStore {
         app::emit!(HealthEvent::PoolCreated { 
             entity_id: &entity_id,
             title: &title,
-            reward_amount
+            reward_amount,
+            expiry_date
         });
 
         Ok(())
@@ -308,24 +322,26 @@ impl HealthDataStore {
     ) -> Result<Option<ResearchPool>, Error> {
         self.research_pools.get(entity_id).map_err(Error::from)
     }
+
     pub fn list_research_pools(&self) -> Result<Vec<ResearchPool>, Error> {
-        env::log("Listing all research pools");
-        
-        let mut pools = Vec::new();
-        
-        // Iterate through all pools and collect active ones
-        for (_, pool) in self.research_pools.entries()? {
-            if pool.status == "active" {
-                pools.push(pool);
-            }
+    env::log("Listing all research pools");
+    
+    let mut pools = Vec::new();
+    let current_time = env::time_now();
+    
+ 
+    for (_, pool) in self.research_pools.entries()? {
+        if pool.status == "active" && pool.expiry_date > current_time {
+            pools.push(pool);
         }
-        
-        // Sort by created_at descending (newest first)
-        pools.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        
-        env::log(&format!("Found {} active research pools", pools.len()));
-        Ok(pools)
     }
+    
+
+    pools.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    
+    env::log(&format!("Found {} active research pools", pools.len()));
+    Ok(pools)
+}
 
     pub fn list_authorized_reports(
         &self,
@@ -334,15 +350,14 @@ impl HealthDataStore {
         env::log(&format!("Listing authorized reports for entity: {}", entity_id));
         
         let mut authorized_reports = Vec::new();
-        
-        // Iterate through all records and check authorization
+      
         for (_, record) in self.records.entries()? {                
-            // Check if entity is authorized for this record
             if record.authorized_ids.contains(&entity_id.to_string()) {
                 authorized_reports.push(PatientDataResponse {
                     data: record.data.clone(),
                     record_type: record.record_type.clone(),
-                    timestamp: record.timestamp
+                    timestamp: record.timestamp,
+                    owner_id: record.owner_id.clone()
                 });
             }
         }
@@ -351,23 +366,23 @@ impl HealthDataStore {
         Ok(authorized_reports)
     }
 
-    // Delete patient data
+
     pub fn delete_patient_data(&mut self, patient_id: &str) -> Result<(), Error> {
         env::log(&format!("Deleting data for patient: {}", patient_id));
         
-        // Get the executor ID (caller)
+   
         let caller = env::executor_id();
         
         if let Some(record) = self.records.get(patient_id)? {
-            // Verify ownership
+       
             if record.owner_id != String::from_utf8_lossy(&caller).to_string() {
                 return Err(Error::msg("Not authorized to delete this record"));
             }
             
-            // Remove record
+          
             self.records.remove(patient_id)?;
             
-            // Remove associated consent policies
+     
             let keys_to_remove: Vec<String> = self.consent_policies.entries()?
                 .filter_map(|(key, _)| {
                     if key.starts_with(&format!("{}:", patient_id)) {
@@ -389,7 +404,6 @@ impl HealthDataStore {
         }
     }
 
-    // Delete research pool
     pub fn delete_research_pool(&mut self, entity_id: &str) -> Result<(), Error> {
         env::log(&format!("Deleting research pool for entity: {}", entity_id));
         
@@ -413,7 +427,7 @@ impl HealthDataStore {
         }
     }
 
-    // Update patient data
+
     pub fn update_patient_data(
         &mut self,
         patient_id: &str,
@@ -444,7 +458,7 @@ impl HealthDataStore {
         }
     }
 
-    // Update research pool
+
     pub fn update_research_pool(
         &mut self,
         entity_id: &str,
@@ -484,32 +498,37 @@ impl HealthDataStore {
     pub fn submit_to_pool(
         &mut self,
         entity_id: &str,
+        patient_id: &str,
     ) -> Result<(), Error> {
-        let patient_id = hex::encode(env::executor_id());
+        // Get pool and check expiry
+        let pool = self.research_pools.get(entity_id)?
+            .ok_or_else(|| Error::msg("Pool not found"))?;
         
+        let current_time = env::time_now();
+        if current_time >= pool.expiry_date {
+            return Err(Error::msg("Pool has expired"));
+        }
+    
         let submission = PoolSubmission {
-            patient_id: patient_id.clone(),
+            patient_id: patient_id.to_string(),
             entity_id: entity_id.to_string(),
-            submitted_at: env::time_now(),
+            submitted_at: current_time,
             status: "pending".to_string(),
-
         };
-
-        // Get or create submissions map for this entity
+    
         let mut entity_submissions = self.pool_submissions
             .get(entity_id)?
             .unwrap_or_else(|| UnorderedMap::new());
         
-        // Add submission
-        entity_submissions.insert(patient_id.clone(), submission)?;
+        entity_submissions.insert(patient_id.to_string(), submission)?;
         self.pool_submissions.insert(entity_id.to_string(), entity_submissions)?;
-
+    
         app::emit!(HealthEvent::PoolSubmission {
-            patient_id: &patient_id,
+            patient_id,
             entity_id,
             status: "pending"
         });
-
+    
         Ok(())
     }
 
@@ -519,20 +538,12 @@ impl HealthDataStore {
         patient_id: &str,
         status: String,
     ) -> Result<(), Error> {
-        // Verify caller is pool owner
-        let pool = self.research_pools.get(entity_id)?
-            .ok_or_else(|| Error::msg("Pool not found"))?;
-        
-        if pool.entity_id != String::from_utf8_lossy(&env::executor_id()).to_string() {
-            return Err(Error::msg("Not authorized"));
-        }
-
-        // Get entity submissions
+      
         let mut entity_submissions = self.pool_submissions
             .get(entity_id)?
             .ok_or_else(|| Error::msg("No submissions found"))?;
 
-        // Update submission status
+      
         if let Some(mut submission) = entity_submissions.get(patient_id)? {
             submission.status = status.clone();
             entity_submissions.insert(patient_id.to_string(), submission)?;
@@ -549,4 +560,29 @@ impl HealthDataStore {
             Err(Error::msg("Submission not found"))
         }
     }
+
+    pub fn get_patient_submissions(
+        &self,
+        patient_id: &str
+    ) -> Result<Vec<SubmissionWithPool>, Error> {
+        let mut submissions = Vec::new();
+        
+        for (entity_id, entity_submissions) in self.pool_submissions.entries()? {
+            if let Some(submission) = entity_submissions.get(patient_id)? {
+            
+                if let Some(pool) = self.research_pools.get(&entity_id)? {
+                    submissions.push(SubmissionWithPool {
+                        submission,
+                        pool_title: pool.title,
+                        pool_description: pool.description,
+                        reward_amount: pool.reward_amount,
+                        expiry_date: pool.expiry_date
+                    });
+                }
+            }
+        }
+
+        submissions.sort_by(|a, b| b.submission.submitted_at.cmp(&a.submission.submitted_at));
+        Ok(submissions)
+    }  
 }

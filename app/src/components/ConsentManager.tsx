@@ -4,7 +4,7 @@ import styled from 'styled-components';
 import { HealthDataApi } from '../api/healthDataApi';
 import { useTheme } from '../contexts/ThemeContext';
 import { generateConsentProof } from '../utils/ProofGeneration';
-import {  getJWTObject } from '../utils/storage';
+import { getUserID } from '../utils/UserIdGenerate';
 import { ABI } from '../abi/Contract_ABI';
 import { type Abi } from 'starknet';
 import {
@@ -175,15 +175,12 @@ export function ConsentManager() {
   const [useProof, setUseProof] = useState(false);
   const [proofStatus, setProofStatus] = useState<'none' | 'generating' | 'ready'>('none');
   const [proofData, setProofData] = useState<{proof: string, timestamp: number} | null>(null);
-  const jwtObject = getJWTObject();
   const [reason, setReason] = useState<typeof CONSENT_REASONS[keyof typeof CONSENT_REASONS]>(CONSENT_REASONS.HOSPITAL);
   const [txStatus, setTxStatus] = useState<'none' | 'pending' | 'success' | 'error'>('none');
-  const truncateToShortString = (str: string): string => {
-    return str.length > 31 ? str.substring(0, 31) : str;
-  };
+  const userId = getUserID();
 
     const contractAddress =
-        '0x064fc926e3d3cc3c471b407704d867aa838aa0d3881415c7977b966b2db82d2d';
+        '0x01fef8db26d72596018cb1783bb856123099b1a8efac4454c7976171612d0dba';
       const { contract } = useContract({
         address: contractAddress,
         abi: ABI as Abi,
@@ -196,10 +193,10 @@ export function ConsentManager() {
       const calls = useMemo(() => {
         if (!contract || !proofData) return [];
       
-        const shortPatientId = truncateToShortString(jwtObject?.executor_public_key || '');
-        const shortEntityId = truncateToShortString(entityId);
-        const shortReason = truncateToShortString(reason);
-        const shortProof = truncateToShortString(proofData.proof);
+        const PatientId = userId || '';
+        const EntityId = entityId;
+        const Reason = reason;
+        const Proof = proofData.proof;
       
         // Format expiration as enum variant with tagged union format
         const expiration = [
@@ -209,14 +206,14 @@ export function ConsentManager() {
       
         return [
           contract.populate('add_consent_proof', [
-            shortPatientId,
-            shortEntityId, 
-            shortReason,
-            shortProof,
+            PatientId,
+            EntityId, 
+            Reason,
+            Proof,
             expiration
           ])
         ];
-      }, [contract, proofData, entityId, reason, jwtObject]);
+      }, [contract, proofData, entityId, reason, userId]);
     
       const {
         send: writeAsync,
@@ -241,33 +238,41 @@ export function ConsentManager() {
   async function generateProof() {
     try {
       setProofStatus('generating');
-      const patientId = jwtObject?.executor_public_key; // Get logged in patient ID
+      const patientId = userId;
       if (!patientId) {
         throw new Error('Patient ID not found');
       }
-      const data = await generateConsentProof(
-        patientId,
-        entityId,
-        reason // Use selected reason
-      );
+  
+      const data = await generateConsentProof(patientId, entityId, reason);
       setProofData(data);
-      console.log('Proof data:', data);
       setProofStatus('ready');
-      api.addConsent(entityId, reason, data.proof);
-      // Auto-trigger transaction
+  
+      // Submit to research pool if research access selected
+      if (reason === CONSENT_REASONS.RESEARCH) {
+        setTxStatus('pending');
+        const poolResult = await api.submitToPool(entityId);
+        if (poolResult.error) {
+          throw new Error(poolResult.error.message);
+        }
+      }
+  
+      // Add consent and trigger transaction
       try {
+        await api.addConsent(entityId, reason, data.proof);
         setTxStatus('pending');
         await writeAsync();
         setTxStatus('success');
       } catch (err) {
         console.error('Transaction failed:', err);
         setTxStatus('error');
+        throw err;
       }
-
+  
     } catch (err) {
-      console.error('Failed to generate proof:', err);
+      console.error('Failed to process request:', err);
       setProofStatus('none');
-      alert('Failed to generate proof');
+      setTxStatus('error');
+      alert('Failed to process request');
     }
   }
 
@@ -320,10 +325,12 @@ export function ConsentManager() {
 
         {txStatus !== 'none' && (
           <TransactionStatus status={txStatus} theme={theme}>
-            {txStatus === 'pending' && '⏳ Confirming transaction...'}
-            {txStatus === 'success' && '✅ Access granted successfully!'}
-            {txStatus === 'error' && '❌ Transaction failed. Please try again.'}
-          </TransactionStatus>
+          {txStatus === 'pending' && '⏳ Processing request...'}
+          {txStatus === 'success' && (reason === CONSENT_REASONS.RESEARCH ? 
+            '✅ Access granted and submitted to research pool!' : 
+            '✅ Access granted successfully!')}
+          {txStatus === 'error' && '❌ Transaction failed. Please try again.'}
+        </TransactionStatus>
         )}
       </ProofSection>
 

@@ -31,6 +31,7 @@ export enum ClientMethod {
   UPDATE_SUBMISSION_STATUS = 'update_submission_status',
   GET_POOL_SUBMISSIONS    = 'get_pool_submissions',
   SUBMIT_TO_POOL = 'submit_to_pool',
+  GET_PATIENT_SUBMISSIONS = 'get_patient_submissions',
 
 }
 

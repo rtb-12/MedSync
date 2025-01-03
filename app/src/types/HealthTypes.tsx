@@ -1,6 +1,5 @@
 // src/types/HealthTypes.ts
 export interface PatientRecord {
-  encrypted_data: Uint8Array;
   data: string;
   timestamp: number;
   record_type: string;

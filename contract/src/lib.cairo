@@ -1,5 +1,6 @@
 use starknet::ContractAddress;
 
+
 #[starknet::interface]
 pub trait IOwnable<TContractState> {
     fn transfer_ownership(ref self: TContractState, new_owner: Person);
@@ -46,8 +47,9 @@ pub trait IDataAccessLogging<TContractState> {
 
 #[starknet::interface]
 pub trait IRewardPool<TContractState> {
-    fn deposit_reward(ref self: TContractState, entity_id: felt252, eth_amount: u256);
-    fn withdraw_reward(ref self: TContractState, entity_id: felt252, eth_amount: u256);
+    fn deposit_reward(ref self: TContractState, entity_id: felt252, eth_amount: u256, expiry: u64);
+    fn withdraw_reward(ref self: TContractState, entity_id: felt252);
+    fn add_participant(ref self: TContractState,entity_id: felt252, participant: ContractAddress );
 }
 
 
@@ -78,12 +80,22 @@ pub struct DataRequestLog {
     patient_id: felt252,
     entity_id: felt252,
 }
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct RewardPoolData {
+        entity_id: felt252,
+        amount: u256,
+        expiry: u64,
+        is_active: bool,
+        participant_count: u32  
+    }
 
 // Contract implementation
 #[starknet::contract]
 mod health_data {
-    // use core::option::OptionTrait;
-    use super::{IDataAccessLogging, IConsentManagement, IRewardPool,Person, Consent, DataRequestLog, Expiration};
+
+    use super::{IDataAccessLogging, IConsentManagement, IRewardPool, Person, Consent, DataRequestLog, Expiration,RewardPoolData};
+
+    
     use core::starknet::storage::{
         Map,
         StorageMapReadAccess,
@@ -103,16 +115,16 @@ mod health_data {
     const TOKEN_USD: felt252 = 19514442401534788;
     const DECIMAL_FACTOR: u256 = 100000000;
     const TOKEN_ADDRESS: felt252 = 0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7;
-
     // Storage declaration
     #[storage]
     struct Storage {
-        owner: Person,
-        consents: Map<(felt252, felt252), Consent>, 
-        logs: Map<(felt252, felt252), DataRequestLog>,
-        rewards: Map<felt252, u256>, // Entity ID to Reward Balance mapping
-        pragma_contract: ContractAddress,
-    }
+            owner: Person,
+            consents: Map<(felt252, felt252), Consent>, 
+            logs: Map<(felt252, felt252), DataRequestLog>,
+            rewards: Map<felt252, u256>, 
+            pragma_contract: ContractAddress,
+            reward_pools: Map<felt252, RewardPoolData>,
+        }
 
     #[generate_trait]
     impl InternalMethods of InternalMethodsTrait {
@@ -131,6 +143,7 @@ mod health_data {
         DataAccessed: DataAccessed,
         RewardDeposited: RewardDeposited,
         RewardWithdrawn: RewardWithdrawn,
+        ParticipantAdded: ParticipantAdded,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -153,17 +166,27 @@ mod health_data {
         entity_id: felt252,
 
     }
-    #[derive(Drop, starknet::Event)]
-    struct RewardDeposited {
-        entity_id: felt252,
-        amount: u256,
-    }
+
 
     #[derive(Drop, starknet::Event)]
     struct RewardWithdrawn {
         entity_id: felt252,
         amount: u256,
     }
+
+    #[derive(Drop, starknet::Event)]
+    struct RewardDeposited {
+    entity_id: felt252,
+    amount: u256,
+    expiry: u64
+    }
+
+    #[derive(Drop, starknet::Event)]
+struct ParticipantAdded {
+    entity_id: felt252,
+    participant: ContractAddress,
+    total_participants: u32
+}
 
 
     #[constructor]
@@ -211,7 +234,7 @@ fn constructor(ref self: ContractState, initial_owner: ContractAddress) {
                 expiration 
             };
 
-            // Store consent with timestamp validation
+    
             match expiration {
                 Expiration::Finite(exp_time) => {
                     assert(exp_time > current_timestamp, 'Expiration must be in future');
@@ -234,22 +257,20 @@ fn constructor(ref self: ContractState, initial_owner: ContractAddress) {
             purpose: felt252,
             timestamp: felt252
         ) -> bool {
-            // Get stored consent
+          
             let consent = self.consents.read((patient_id, entity_id));
-            
-            // Verify consent exists
+        
             if consent.patient_id == 0 {
                 return false;
             }
-        
-            // Verify timestamp and expiration
+ 
             let current_timestamp = get_block_timestamp();
             let expiration_valid = match consent.expiration {
                 Expiration::Finite(exp_time) => current_timestamp <= exp_time,
                 Expiration::Infinite => true
             };
         
-            // Recompute proof hash chain
+   
             let proof = pedersen::pedersen(
                 pedersen::pedersen(
                     pedersen::pedersen(patient_id, entity_id),
@@ -258,7 +279,7 @@ fn constructor(ref self: ContractState, initial_owner: ContractAddress) {
                 timestamp
             );
             
-            // Verify all conditions
+
             let proof_matches = proof == consent.proof;
             let purpose_valid = consent.purpose == purpose;
         
@@ -283,49 +304,89 @@ fn constructor(ref self: ContractState, initial_owner: ContractAddress) {
     
      #[abi(embed_v0)]
     impl RewardPool of IRewardPool<ContractState> {
-        fn deposit_reward(ref self: ContractState, entity_id: felt252, eth_amount: u256) {
-            // Transfer ETH tokens directly
-            let token = ERC20ABIDispatcher {
-                contract_address: 0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7.try_into().unwrap()
-            };
-            
-            let caller = get_caller_address();
-            token.transfer_from(caller, get_contract_address(), eth_amount);
-            
-            // Update balances - store the ETH amount directly
-            let current = self.rewards.read(entity_id);
-            self.rewards.write(entity_id, current + eth_amount);
-            
-            // Emit event with ETH amount
-            self.emit(Event::RewardDeposited(RewardDeposited {
-                entity_id,
-                amount: eth_amount
-            }));
-        }
+    fn deposit_reward(
+    ref self: ContractState, 
+    entity_id: felt252, 
+    eth_amount: u256,
+    expiry: u64
+    ) {
+ 
+    let current_time = get_block_timestamp();
+    assert(expiry > current_time, 'Invalid expiry time');
+    
+   
+    let token = ERC20ABIDispatcher {
+        contract_address: TOKEN_ADDRESS.try_into().unwrap()
+    };
+    
+    let caller = get_caller_address();
+    token.transfer_from(caller, get_contract_address(), eth_amount);
+    
+    let pool = RewardPoolData {
+        entity_id,
+        amount: eth_amount,
+        expiry,
+        is_active: true,
+        participant_count: 0
+    };
+    
 
-        fn withdraw_reward(ref self: ContractState, entity_id: felt252, eth_amount: u256) {
-            // Check balance
-            let current = self.rewards.read(entity_id);
-            assert(current >= eth_amount, 'Insufficient balance');
-            
-            // Get ETH token contract
-            let token = ERC20ABIDispatcher {
-                contract_address: 0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7.try_into().unwrap()
-            };
-            
-            // Transfer ETH tokens to caller
-            let recipient = get_caller_address();
-            token.transfer(recipient, eth_amount);
-            
-            // Update balance
-            self.rewards.write(entity_id, current - eth_amount);
-            
-            // Emit withdrawal event
-            self.emit(Event::RewardWithdrawn(RewardWithdrawn {
-                entity_id,
-                amount: eth_amount
-            }));
-        }
+    self.reward_pools.write(entity_id, pool);
+    
+
+    self.emit(Event::RewardDeposited(RewardDeposited {
+        entity_id,
+        amount: eth_amount,
+        expiry
+    }));
+}
+   fn add_participant(
+    ref self: ContractState,
+    entity_id: felt252,
+    participant: ContractAddress
+    ) {
+  
+    let mut pool = self.reward_pools.read(entity_id);
+    
+ 
+    assert(pool.is_active, 'Pool not active');
+    assert(get_block_timestamp() < pool.expiry, 'Pool expired');
+    
+    pool.participant_count += 1;
+ 
+    self.reward_pools.write(entity_id, pool);
+    
+    self.emit(Event::ParticipantAdded(ParticipantAdded {
+        entity_id,
+        participant,
+        total_participants: pool.participant_count
+    }));
+}
+
+    fn withdraw_reward(ref self: ContractState, entity_id: felt252) {
+ 
+    let pool = self.reward_pools.read(entity_id);
+    assert(pool.is_active, 'Pool not active');
+    assert(get_block_timestamp() >= pool.expiry, 'Pool not expired');
+    assert(pool.participant_count > 0, 'No participants');
+    
+    let share_amount = pool.amount / pool.participant_count.into();
+    
+  
+    let token = ERC20ABIDispatcher {
+        contract_address: TOKEN_ADDRESS.try_into().unwrap()
+    };
+    
+    
+    let recipient = get_caller_address();
+    token.transfer(recipient, share_amount);
+    
+   
+    self.emit(Event::RewardWithdrawn(RewardWithdrawn {
+        entity_id,
+        amount: share_amount
+    }));
+}
     }
 
     #[abi(embed_v0)]
@@ -348,3 +409,4 @@ fn constructor(ref self: ContractState, initial_owner: ContractAddress) {
         }
     }
 }
+

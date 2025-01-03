@@ -1,4 +1,3 @@
-// src/pages/reward-pool/RewardPoolCreator.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { Card, Button, Input } from '../../components/shared/Card';
@@ -121,7 +120,7 @@ const ReportCard = styled(Card)<{ theme: 'light' | 'dark' }>`
   padding: 1rem;
   cursor: pointer;
   transition: transform 0.2s;
-  
+
   &:hover {
     transform: translateY(-2px);
   }
@@ -156,10 +155,10 @@ const ButtonGroup = styled.div`
 `;
 
 const DeleteButton = styled(Button)`
-  background: #EF4444;
+  background: #ef4444;
   color: white;
   &:hover {
-    background: #DC2626;
+    background: #dc2626;
   }
 `;
 
@@ -199,19 +198,28 @@ export function RewardPoolCreator() {
   const [showReport, setShowReport] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [reports, setReports] = useState<PatientRecord[]>([]);
-  const [selectedReport, setSelectedReport] = useState<PatientRecord | null>(null);
+  const [selectedReport, setSelectedReport] = useState<PatientRecord | null>(
+    null,
+  );
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [poolToDelete, setPoolToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-
+  const [expiryDate, setExpiryDate] = useState<string>(new Date().toISOString().slice(0, 16));
   const api = new HealthDataApi();
   const contractAddress =
-    '0x064fc926e3d3cc3c471b407704d867aa838aa0d3881415c7977b966b2db82d2d';
+    '0x01fef8db26d72596018cb1783bb856123099b1a8efac4454c7976171612d0dba';
   const { contract } = useContract({
     address: contractAddress,
     abi: ABI as Abi,
   });
+
+  const getUnixTimestamp = (dateString: string): string => {
+    // Convert ISO string to Unix timestamp (seconds since epoch)
+    const milliseconds = new Date(dateString).getTime();
+    const seconds = Math.floor(milliseconds / 1000);
+    return seconds.toString();
+  };
   useEffect(() => {
     console.log('Contract address:', contractAddress);
     console.log('Contract instance:', contract);
@@ -222,26 +230,40 @@ export function RewardPoolCreator() {
 
   const calls = useMemo(() => {
     if (!contract || !rewardAmount) return [];
-
-    // Create entity ID from title and timestamp
+  
+    // Create entity ID
     const entityId = BigInt(
       '0x' + Buffer.from(title + Date.now().toString()).toString('hex'),
     );
-
-    // Convert to u256 compatible value
+  
+    // Convert amount to u256
     const amount = BigInt(Math.floor(parseFloat(rewardAmount)));
-
-    // Validate u256 range
     if (amount < 0 || amount > MAX_U256) {
       console.error('Amount out of u256 range');
       return [];
     }
-
-    console.log('Amount as u256:', amount.toString());
-
-    return [contract.populate('deposit_reward', [entityId, amount])];
-  }, [contract, title, rewardAmount]);
-
+  
+    // Convert expiry to Cairo u64 compatible timestamp
+    const currentTime = Math.floor(Date.now() / 1000);
+    const expiryUnix = Math.floor(new Date(expiryDate).getTime() / 1000);
+    
+    // Validate expiry
+    if (expiryUnix <= currentTime) {
+      console.error('Expiry must be in future');
+      return [];
+    }
+  
+    // Convert to BigInt for contract call
+    const expiryTimestamp = BigInt(expiryUnix);
+  
+    console.log('Contract call params:', {
+      entityId: entityId.toString(),
+      amount: amount.toString(),
+      expiry: expiryTimestamp.toString()
+    });
+  
+    return [contract.populate('deposit_reward', [entityId, amount, expiryTimestamp])];
+  }, [contract, title, rewardAmount, expiryDate]);
   const {
     send: writeAsync,
     data: writeData,
@@ -328,36 +350,49 @@ export function RewardPoolCreator() {
   };
 
   useEffect(() => {
-    const handleSuccessfulTransaction = async () => {
-      if (waitStatus === 'success' && isSubmitting) {
+    const handleTransaction = async () => {
+      // Check if we have a transaction hash
+      if (!writeData?.transaction_hash) return;
+  
+      // Monitor transaction status
+      if (waitStatus === 'success') {
+        console.log('Transaction successful:', writeData.transaction_hash);
+        
         try {
           const result = await api.createResearchPool(
             title,
             description,
-            parseFloat(rewardAmount)
+            parseFloat(rewardAmount),
+            Math.floor(new Date(expiryDate).getTime() / 1000)
           );
-
+  
           if (result.error) {
-            console.error('Failed to store pool details:', result.error);
-            return;
+            throw new Error(result.error.message);
           }
-
-          // Reset form and state
+  
+          // Reset form
           setTitle('');
           setDescription('');
           setRewardAmount('');
           setIsSubmitting(false);
-          
-          // Refresh pools list
-          fetchPools();
+  
+          // Refresh pools
+          await fetchPools();
+  
+          // Show success message
+          alert('Pool created successfully!');
         } catch (error) {
           console.error('Failed to create pool:', error);
+          alert('Failed to store pool details');
         }
+      } else if (waitStatus === 'error') {
+        console.error('Transaction failed:', waitError);
+        setIsSubmitting(false);
       }
     };
-
-    handleSuccessfulTransaction();
-  }, [waitStatus, isSubmitting]);
+  
+    handleTransaction();
+  }, [writeData?.transaction_hash, waitStatus]);
 
   const fetchPools = async () => {
     setIsLoading(true);
@@ -379,9 +414,25 @@ export function RewardPoolCreator() {
   const handleApproveReport = async (patientId: string) => {
     try {
       setIsLoading(true);
-      await api.updateSubmissionStatus(pools[0].entity_id, patientId, "approved");
+
+      // Get current pool's entity ID
+      const currentPool = pools[0]; // Assuming we're working with the first pool
+      if (!currentPool) {
+        throw new Error('No active research pool found');
+      }
+
+      // Update submission status
+      const result = await api.updateSubmissionStatus(
+        currentPool.entity_id,
+        patientId,
+        'approved',
+      );
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
       setShowReport(false);
-      // Show success message
       alert('Report approved successfully!');
     } catch (err) {
       console.error('Failed to approve report:', err);
@@ -392,25 +443,24 @@ export function RewardPoolCreator() {
   };
 
   const handleDeletePool = (entityId: string) => {
-    console.log('Deleting pool:', entityId); // Add debug log
+    console.log('Deleting pool:', entityId);
     setPoolToDelete(entityId);
     setShowDeleteConfirm(true);
   };
 
   const confirmDelete = async () => {
     if (!poolToDelete) return;
-    
+
     try {
       setIsDeleting(true);
       const result = await api.deleteResearchPool(poolToDelete);
       if (result.error) {
         throw new Error(result.error.message);
       }
-      
+
       // Remove pool from state
-      setPools(pools.filter(p => p.entity_id !== poolToDelete));
+      setPools(pools.filter((p) => p.entity_id !== poolToDelete));
       setShowDeleteConfirm(false);
-      
     } catch (err) {
       console.error('Failed to delete pool:', err);
       alert('Failed to delete research pool');
@@ -454,6 +504,14 @@ export function RewardPoolCreator() {
               step="1"
               required
             />
+            <Input
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
+              type="datetime-local"
+              min={new Date().toISOString().slice(0, 16)}
+              required
+              placeholder="Select expiry date and time"
+            />
             <Button
               variant="primary"
               type="submit"
@@ -479,7 +537,7 @@ export function RewardPoolCreator() {
               <p>Reward: {pool.reward_amount} STARK</p>
               <p>Status: {pool.status}</p>
               <p>Created: {new Date(pool.created_at).toLocaleString()}</p>
-              
+
               <ButtonGroup>
                 <DeleteButton
                   onClick={() => handleDeletePool(pool.entity_id)}
@@ -496,21 +554,23 @@ export function RewardPoolCreator() {
           <p>No research pools found. Create one to get started!</p>
         )}
 
-<ReportsSection>
+        <ReportsSection>
           <h3>Submitted Reports</h3>
           {isReportLoading ? (
             <LoadingState message="Loading reports..." />
           ) : (
             <ReportGrid>
               {reports.map((report, index) => (
-                <ReportCard 
-                  key={index} 
+                <ReportCard
+                  key={index}
                   theme={theme}
                   onClick={() => handleViewReport(report)}
                 >
                   <h4>Report Type: {report.record_type}</h4>
                   <p>Owner: {report.owner_id}</p>
-                  <p>Submitted: {new Date(report.timestamp).toLocaleString()}</p>
+                  <p>
+                    Submitted: {new Date(report.timestamp).toLocaleString()}
+                  </p>
                 </ReportCard>
               ))}
             </ReportGrid>
@@ -522,7 +582,7 @@ export function RewardPoolCreator() {
             <Overlay onClick={() => setShowReport(false)} />
             <ReportModal theme={theme}>
               <h3>Report Details</h3>
-              
+
               <ReportGrid>
                 {(() => {
                   const data = JSON.parse(selectedReport.data);
@@ -532,7 +592,7 @@ export function RewardPoolCreator() {
                         <h4>Record Type</h4>
                         <p>{data.recordType || 'Not specified'}</p>
                       </ReportField>
-                      
+
                       <ReportField>
                         <h4>Diagnosis</h4>
                         <p>{data.diagnosis || 'None'}</p>
@@ -567,15 +627,17 @@ export function RewardPoolCreator() {
               </ReportGrid>
 
               <ButtonGroup>
-                <Button 
+                <Button
                   onClick={() => handleApproveReport(selectedReport.owner_id)}
                   variant="primary"
+                  disabled={isLoading}
                 >
-                  Approve for Research Pool
+                  {isLoading ? 'Approving...' : 'Approve for Research Pool'}
                 </Button>
-                <Button 
+                <Button
                   onClick={() => setShowReport(false)}
                   variant="secondary"
+                  disabled={isLoading}
                 >
                   Close
                 </Button>
@@ -586,16 +648,15 @@ export function RewardPoolCreator() {
 
         {showDeleteConfirm && poolToDelete && (
           <>
-            <Overlay onClick={() => !isDeleting && setShowDeleteConfirm(false)} />
+            <Overlay
+              onClick={() => !isDeleting && setShowDeleteConfirm(false)}
+            />
             <ConfirmDialog theme={theme}>
               <h3>Delete Research Pool?</h3>
               <p>This action cannot be undone.</p>
-              
+
               <ButtonGroup>
-                <DeleteButton
-                  onClick={confirmDelete}
-                  disabled={isDeleting}
-                >
+                <DeleteButton onClick={confirmDelete} disabled={isDeleting}>
                   {isDeleting ? 'Deleting...' : 'Confirm Delete'}
                 </DeleteButton>
                 <Button
@@ -613,4 +674,3 @@ export function RewardPoolCreator() {
     </DashboardWrapper>
   );
 }
-

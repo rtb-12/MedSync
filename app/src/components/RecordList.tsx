@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, Button } from './shared/Card';
 import styled from 'styled-components';
 import { PatientRecord } from '../types/HealthTypes';
 import { useTheme } from '../contexts/ThemeContext';
+import { HealthDataApi } from '../api/healthDataApi';
 
 interface PatientRecord {
   data: string;  // This contains the JSON string of medical details
@@ -24,6 +25,11 @@ interface MedicalDetails {
   doctorName: string;
 }
 
+interface Props {
+  records: PatientRecord[];
+  onDelete: (patientId: string) => void;
+  onUpdate: (patientId: string, data: any, recordType: string) => void;
+}
 
 const RecordGrid = styled.div`
   display: grid;
@@ -154,8 +160,11 @@ const RecordCard = styled(Card)<{ theme: 'light' | 'dark' }>`
   }
 `;
 
-export function RecordList({ records, onDelete }: Props) {
+export function RecordList({ records, onDelete, onUpdate }: Props) {
   const { theme } = useTheme();
+  const api = new HealthDataApi();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const parseMedicalDetails = (data: string): MedicalDetails | null => {
     try {
@@ -166,6 +175,50 @@ export function RecordList({ records, onDelete }: Props) {
     }
   };
 
+  const handleDelete = async (patientId: string) => {
+    if (!window.confirm('Are you sure you want to delete this record?')) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const result = await api.deletePatientData(patientId);
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+      onDelete(patientId);
+    } catch (err) {
+      console.error('Failed to delete record:', err);
+      alert('Failed to delete record');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleUpdate = async (record: PatientRecord) => {
+    setIsUpdating(true);
+    try {
+      const medicalDetails = parseMedicalDetails(record.data);
+      if (!medicalDetails) return;
+
+      const data = new TextEncoder().encode(JSON.stringify(medicalDetails));
+      const result = await api.updatePatientData(
+        record.owner_id,
+        data,
+        record.record_type
+      );
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+      onUpdate(record.owner_id, medicalDetails, record.record_type);
+    } catch (err) {
+      console.error('Failed to update record:', err);
+      alert('Failed to update record');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   return (
     <Card theme={theme}>
@@ -250,7 +303,19 @@ export function RecordList({ records, onDelete }: Props) {
               </div>
 
               <div className="record-actions">
-                <Button onClick={() => onDelete(record.owner_id)}>Delete</Button>
+                <Button 
+                  onClick={() => handleUpdate(record)}
+                  disabled={isUpdating}
+                  style={{ marginRight: '1rem' }}
+                >
+                  {isUpdating ? 'Updating...' : 'Update'}
+                </Button>
+                <Button 
+                  onClick={() => handleDelete(record.owner_id)}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? 'Deleting...' : 'Delete'}
+                </Button>
               </div>
             </RecordCard>
           );

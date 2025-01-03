@@ -10,7 +10,7 @@ import { createJwtHeader } from '../utils/jwtHeaders';
 import { getContextId } from '../utils/node';
 import { ClientMethod } from './clientApi';
 import { getNodeUrl } from '../utils/node';
-
+import { getUserID  } from '../utils/UserIdGenerate';
 interface StorePatientDataArgs {
   patient_id: string;
   encrypted_data: number[];
@@ -21,14 +21,6 @@ interface AddConsentArgs {
   entity_id: string;
   purpose: string;
   starknet_proof: number[]; // byte array for proof
-}
-export interface PatientRecord {
-  data: string;
-  timestamp: number;
-  record_type: string;
-  owner_id: string;
-  authorized_ids: string[];
-  is_anonymized: boolean;
 }
 interface AccessRequestArgs {
   patient_id: string;
@@ -65,17 +57,18 @@ interface PoolSubmission {
   submitted_at: number;
   status: string;
 }
-
+const userId = getUserID();
 export class HealthDataApi {
   private rpcClient: JsonRpcClient;
   private applicationId: string;
 
   constructor() {
     this.rpcClient = new JsonRpcClient(
-      getNodeUrl(), // Use getNodeUrl instead of env
+      getNodeUrl(), 
       '/jsonrpc',
     );
     this.applicationId = import.meta.env.VITE_APPLICATION_ID ?? '';
+    // console.log('Application ID:', this.applicationId);
   }
 
   private getConfigAndJwt() {
@@ -106,8 +99,8 @@ export class HealthDataApi {
         contextId: jwtObject?.context_id ?? getContextId(),
         method: ClientMethod.GET_PATIENT_RECORDS,
         argsJson: {
-          patient_id: jwtObject.executor_public_key,
-          entity_id: jwtObject.executor_public_key,
+          patient_id: userId,
+          entity_id: userId,
         },
         executorPublicKey: jwtObject.executor_public_key,
       },
@@ -118,7 +111,7 @@ export class HealthDataApi {
       return { error: response.error };
     }
 
-    const recordData = response?.result?.output;
+    const recordData = response?.result?.output as { data: number[], timestamp: number, record_type: string } | undefined;
     if (!recordData) {
       return { data: [], error: null };
     }
@@ -159,7 +152,7 @@ export class HealthDataApi {
       contextId: jwtObject?.context_id ?? getContextId(),
       method: ClientMethod.STORE_PATIENT_DATA,
       argsJson: {
-        patient_id: jwtObject.executor_public_key,
+        patient_id: userId,
         encrypted_data: Array.from(encryptedData),
         record_type: recordType,
       },
@@ -204,7 +197,7 @@ export class HealthDataApi {
       contextId: jwtObject?.context_id ?? getContextId(),
       method: ClientMethod.ADD_CONSENT,
       argsJson: {
-        patient_id: jwtObject.executor_public_key,
+        patient_id: userId,
         entity_id: entityId,
         purpose: finalPurpose,
         starknet_proof: finalProof,
@@ -312,13 +305,13 @@ export class HealthDataApi {
 
     console.log('=== List Authorized Reports Request ===');
     console.log('Timestamp:', new Date().toISOString());
-    console.log('Entity ID:', jwtObject.executor_public_key);
+
 
     const requestParams = {
       contextId: jwtObject?.context_id ?? getContextId(),
       method: ClientMethod.LIST_AUTHORIZED_REPORTS,
       argsJson: {
-        entity_id: jwtObject.executor_public_key,
+        entity_id: userId,
       },
       executorPublicKey: jwtObject.executor_public_key,
     };
@@ -364,26 +357,40 @@ export class HealthDataApi {
     title: string,
     description: string,
     rewardAmount: number,
-  ): Promise<ApiResponse<boolean>> {
+    expiryDate: number,  
+): Promise<ApiResponse<boolean>> {
     const { jwtObject, config, error } = this.getConfigAndJwt();
     if (error) {
       console.error('Authentication Error:', error);
       return { error };
     }
 
+    // Validate expiry date
+    const currentTime = Math.floor(Date.now() / 1000);
+    if (expiryDate <= currentTime) {
+      return {
+        error: {
+          message: 'Expiry date must be in the future',
+          code: 400,
+        },
+      };
+    }
+
     console.log('=== Create Research Pool Request ===');
     console.log('Timestamp:', new Date().toISOString());
-    console.log('Entity ID:', jwtObject.executor_public_key);
+    console.log('Entity ID:', userId);
     console.log('Title:', title);
+    console.log('Expiry Date:', new Date(expiryDate * 1000).toISOString());
 
     const requestParams = {
       contextId: jwtObject?.context_id ?? getContextId(),
       method: ClientMethod.CREATE_RESEARCH_POOL,
       argsJson: {
-        entity_id: jwtObject.executor_public_key,
+        entity_id: userId,
         title,
         description,
         reward_amount: rewardAmount,
+        expiry_date: expiryDate,  // Add expiry to args
       },
       executorPublicKey: jwtObject.executor_public_key,
     };
@@ -406,7 +413,7 @@ export class HealthDataApi {
         },
       };
     }
-  }
+}
 
   async getResearchPool(): Promise<ApiResponse<ResearchPool>> {
     const { jwtObject, config, error } = this.getConfigAndJwt();
@@ -423,7 +430,7 @@ export class HealthDataApi {
       contextId: jwtObject?.context_id ?? getContextId(),
       method: ClientMethod.GET_RESEARCH_POOL,
       argsJson: {
-        entity_id: jwtObject.executor_public_key,
+        entity_id: userId,
       },
       executorPublicKey: jwtObject.executor_public_key,
     };
@@ -595,7 +602,7 @@ export class HealthDataApi {
       contextId: jwtObject?.context_id ?? getContextId(),
       method: ClientMethod.REVOKE_ACCESS,
       argsJson: {
-        patient_id: jwtObject.executor_public_key,
+        patient_id: userId,
         entity_id: entityId
       },
       executorPublicKey: jwtObject.executor_public_key,
@@ -687,7 +694,8 @@ export class HealthDataApi {
       contextId: jwtObject?.context_id ?? getContextId(),
       method: ClientMethod.SUBMIT_TO_POOL,
       argsJson: {
-        entity_id: entityId
+        entity_id: entityId,
+        patient_id: userId,
       },
       executorPublicKey: jwtObject.executor_public_key,
     };
@@ -766,6 +774,47 @@ export class HealthDataApi {
       return {
         error: {
           message: 'Failed to update submission status',
+          code: 500
+        }
+      };
+    }
+  }
+
+  async getPatientSubmissions(): Promise<ApiResponse<PoolSubmission[]>> {
+    const { jwtObject, config, error } = this.getConfigAndJwt();
+    if (error) {
+      console.error('Authentication Error:', error);
+      return { error };
+    }
+
+    console.log('=== Get Patient Submissions Request ===');
+    console.log('Patient ID:', jwtObject.executor_public_key);
+
+    const requestParams = {
+      contextId: jwtObject?.context_id ?? getContextId(),
+      method: ClientMethod.GET_PATIENT_SUBMISSIONS,
+      argsJson: {
+        patient_id: userId
+      },
+      executorPublicKey: jwtObject.executor_public_key,
+    };
+
+    try {
+      const response = await this.rpcClient.query(requestParams, config);
+      if (response?.error) {
+        console.error('API Error:', response.error);
+        return { error: response.error };
+      }
+
+      const submissions = response?.result?.output ?? [];
+      submissions.sort((a, b) => b.submitted_at - a.submitted_at);
+
+      return { data: submissions, error: null };
+    } catch (err) {
+      console.error('Failed to get patient submissions:', err);
+      return {
+        error: {
+          message: 'Failed to get patient submissions',
           code: 500
         }
       };

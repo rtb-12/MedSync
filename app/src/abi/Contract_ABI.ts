@@ -1,12 +1,12 @@
-export const ABI =[
+export const ABI = [
   {
-    "name": "Ownable",
     "type": "impl",
+    "name": "Ownable",
     "interface_name": "contract::IOwnable"
   },
   {
-    "name": "contract::Person",
     "type": "struct",
+    "name": "contract::Person",
     "members": [
       {
         "name": "address",
@@ -19,12 +19,12 @@ export const ABI =[
     ]
   },
   {
-    "name": "contract::IOwnable",
     "type": "interface",
+    "name": "contract::IOwnable",
     "items": [
       {
-        "name": "transfer_ownership",
         "type": "function",
+        "name": "transfer_ownership",
         "inputs": [
           {
             "name": "new_owner",
@@ -35,8 +35,8 @@ export const ABI =[
         "state_mutability": "external"
       },
       {
-        "name": "get_owner",
         "type": "function",
+        "name": "get_owner",
         "inputs": [],
         "outputs": [
           {
@@ -48,13 +48,13 @@ export const ABI =[
     ]
   },
   {
-    "name": "ConsentManagement",
     "type": "impl",
+    "name": "ConsentManagement",
     "interface_name": "contract::IConsentManagement"
   },
   {
-    "name": "contract::Expiration",
     "type": "enum",
+    "name": "contract::Expiration",
     "variants": [
       {
         "name": "Finite",
@@ -67,8 +67,8 @@ export const ABI =[
     ]
   },
   {
-    "name": "core::bool",
     "type": "enum",
+    "name": "core::bool",
     "variants": [
       {
         "name": "False",
@@ -81,12 +81,12 @@ export const ABI =[
     ]
   },
   {
-    "name": "contract::IConsentManagement",
     "type": "interface",
+    "name": "contract::IConsentManagement",
     "items": [
       {
-        "name": "add_consent_proof",
         "type": "function",
+        "name": "add_consent_proof",
         "inputs": [
           {
             "name": "patient_id",
@@ -113,8 +113,8 @@ export const ABI =[
         "state_mutability": "external"
       },
       {
-        "name": "verify_consent_proof",
         "type": "function",
+        "name": "verify_consent_proof",
         "inputs": [
           {
             "name": "patient_id",
@@ -127,6 +127,10 @@ export const ABI =[
           {
             "name": "purpose",
             "type": "core::felt252"
+          },
+          {
+            "name": "timestamp",
+            "type": "core::felt252"
           }
         ],
         "outputs": [
@@ -137,8 +141,8 @@ export const ABI =[
         "state_mutability": "view"
       },
       {
-        "name": "revoke_consent",
         "type": "function",
+        "name": "revoke_consent",
         "inputs": [
           {
             "name": "patient_id",
@@ -155,13 +159,13 @@ export const ABI =[
     ]
   },
   {
-    "name": "RewardPool",
     "type": "impl",
+    "name": "RewardPool",
     "interface_name": "contract::IRewardPool"
   },
   {
-    "name": "core::integer::u256",
     "type": "struct",
+    "name": "core::integer::u256",
     "members": [
       {
         "name": "low",
@@ -174,12 +178,12 @@ export const ABI =[
     ]
   },
   {
-    "name": "contract::IRewardPool",
     "type": "interface",
+    "name": "contract::IRewardPool",
     "items": [
       {
-        "name": "deposit_reward",
         "type": "function",
+        "name": "deposit_reward",
         "inputs": [
           {
             "name": "entity_id",
@@ -188,22 +192,38 @@ export const ABI =[
           {
             "name": "eth_amount",
             "type": "core::integer::u256"
+          },
+          {
+            "name": "expiry",
+            "type": "core::integer::u64"
           }
         ],
         "outputs": [],
         "state_mutability": "external"
       },
       {
-        "name": "withdraw_reward",
         "type": "function",
+        "name": "withdraw_reward",
+        "inputs": [
+          {
+            "name": "entity_id",
+            "type": "core::felt252"
+          }
+        ],
+        "outputs": [],
+        "state_mutability": "external"
+      },
+      {
+        "type": "function",
+        "name": "add_participant",
         "inputs": [
           {
             "name": "entity_id",
             "type": "core::felt252"
           },
           {
-            "name": "eth_amount",
-            "type": "core::integer::u256"
+            "name": "participant",
+            "type": "core::starknet::contract_address::ContractAddress"
           }
         ],
         "outputs": [],
@@ -212,13 +232,13 @@ export const ABI =[
     ]
   },
   {
-    "name": "DataAccessLogging",
     "type": "impl",
+    "name": "DataAccessLogging",
     "interface_name": "contract::IDataAccessLogging"
   },
   {
-    "name": "contract::DataRequestLog",
     "type": "struct",
+    "name": "contract::DataRequestLog",
     "members": [
       {
         "name": "patient_id",
@@ -231,8 +251,8 @@ export const ABI =[
     ]
   },
   {
-    "name": "core::option::Option::<contract::DataRequestLog>",
     "type": "enum",
+    "name": "core::option::Option::<contract::DataRequestLog>",
     "variants": [
       {
         "name": "Some",
@@ -245,12 +265,12 @@ export const ABI =[
     ]
   },
   {
-    "name": "contract::IDataAccessLogging",
     "type": "interface",
+    "name": "contract::IDataAccessLogging",
     "items": [
       {
-        "name": "log_data_request",
         "type": "function",
+        "name": "log_data_request",
         "inputs": [
           {
             "name": "patient_id",
@@ -265,8 +285,8 @@ export const ABI =[
         "state_mutability": "external"
       },
       {
-        "name": "fetch_data_request_log",
         "type": "function",
+        "name": "fetch_data_request_log",
         "inputs": [
           {
             "name": "patient_id",
@@ -287,8 +307,8 @@ export const ABI =[
     ]
   },
   {
-    "name": "constructor",
     "type": "constructor",
+    "name": "constructor",
     "inputs": [
       {
         "name": "initial_owner",
@@ -297,119 +317,151 @@ export const ABI =[
     ]
   },
   {
-    "kind": "struct",
+    "type": "event",
     "name": "contract::health_data::ConsentAdded",
-    "type": "event",
+    "kind": "struct",
     "members": [
       {
-        "kind": "data",
         "name": "patient_id",
-        "type": "core::felt252"
+        "type": "core::felt252",
+        "kind": "data"
       },
       {
-        "kind": "data",
         "name": "entity_id",
-        "type": "core::felt252"
+        "type": "core::felt252",
+        "kind": "data"
       }
     ]
   },
   {
-    "kind": "struct",
+    "type": "event",
     "name": "contract::health_data::ConsentRevoked",
-    "type": "event",
+    "kind": "struct",
     "members": [
       {
-        "kind": "data",
         "name": "patient_id",
-        "type": "core::felt252"
+        "type": "core::felt252",
+        "kind": "data"
       },
       {
-        "kind": "data",
         "name": "entity_id",
-        "type": "core::felt252"
+        "type": "core::felt252",
+        "kind": "data"
       }
     ]
   },
   {
-    "kind": "struct",
+    "type": "event",
     "name": "contract::health_data::DataAccessed",
-    "type": "event",
+    "kind": "struct",
     "members": [
       {
-        "kind": "data",
         "name": "patient_id",
-        "type": "core::felt252"
+        "type": "core::felt252",
+        "kind": "data"
       },
       {
-        "kind": "data",
         "name": "entity_id",
-        "type": "core::felt252"
+        "type": "core::felt252",
+        "kind": "data"
       }
     ]
   },
   {
-    "kind": "struct",
+    "type": "event",
     "name": "contract::health_data::RewardDeposited",
-    "type": "event",
-    "members": [
-      {
-        "kind": "data",
-        "name": "entity_id",
-        "type": "core::felt252"
-      },
-      {
-        "kind": "data",
-        "name": "amount",
-        "type": "core::integer::u256"
-      }
-    ]
-  },
-  {
     "kind": "struct",
-    "name": "contract::health_data::RewardWithdrawn",
-    "type": "event",
     "members": [
       {
-        "kind": "data",
         "name": "entity_id",
-        "type": "core::felt252"
+        "type": "core::felt252",
+        "kind": "data"
       },
       {
-        "kind": "data",
         "name": "amount",
-        "type": "core::integer::u256"
+        "type": "core::integer::u256",
+        "kind": "data"
+      },
+      {
+        "name": "expiry",
+        "type": "core::integer::u64",
+        "kind": "data"
       }
     ]
   },
   {
-    "kind": "enum",
-    "name": "contract::health_data::Event",
     "type": "event",
+    "name": "contract::health_data::RewardWithdrawn",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "entity_id",
+        "type": "core::felt252",
+        "kind": "data"
+      },
+      {
+        "name": "amount",
+        "type": "core::integer::u256",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "contract::health_data::ParticipantAdded",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "entity_id",
+        "type": "core::felt252",
+        "kind": "data"
+      },
+      {
+        "name": "participant",
+        "type": "core::starknet::contract_address::ContractAddress",
+        "kind": "data"
+      },
+      {
+        "name": "total_participants",
+        "type": "core::integer::u32",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "contract::health_data::Event",
+    "kind": "enum",
     "variants": [
       {
-        "kind": "nested",
         "name": "ConsentAdded",
-        "type": "contract::health_data::ConsentAdded"
+        "type": "contract::health_data::ConsentAdded",
+        "kind": "nested"
       },
       {
-        "kind": "nested",
         "name": "ConsentRevoked",
-        "type": "contract::health_data::ConsentRevoked"
+        "type": "contract::health_data::ConsentRevoked",
+        "kind": "nested"
       },
       {
-        "kind": "nested",
         "name": "DataAccessed",
-        "type": "contract::health_data::DataAccessed"
+        "type": "contract::health_data::DataAccessed",
+        "kind": "nested"
       },
       {
-        "kind": "nested",
         "name": "RewardDeposited",
-        "type": "contract::health_data::RewardDeposited"
+        "type": "contract::health_data::RewardDeposited",
+        "kind": "nested"
       },
       {
-        "kind": "nested",
         "name": "RewardWithdrawn",
-        "type": "contract::health_data::RewardWithdrawn"
+        "type": "contract::health_data::RewardWithdrawn",
+        "kind": "nested"
+      },
+      {
+        "name": "ParticipantAdded",
+        "type": "contract::health_data::ParticipantAdded",
+        "kind": "nested"
       }
     ]
   }

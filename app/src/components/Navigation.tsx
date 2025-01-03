@@ -10,6 +10,8 @@ import {
 import { clearApplicationId, getJWTObject } from '../utils/storage';
 import { useAccount, useConnect } from '@starknet-react/core';
 import { useAuth } from '../contexts/AuthContext';
+
+import { getUserID } from '../utils/UserIdGenerate';
 const Nav = styled.nav<{ theme: 'light' | 'dark' }>`
   background: ${({ theme }) =>
     theme === 'light' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(17, 17, 17, 0.8)'};
@@ -147,7 +149,7 @@ const EntityIDDisplay = styled.div<{ theme: 'light' | 'dark' }>`
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  background: ${({ theme }) => 
+  background: ${({ theme }) =>
     theme === 'light' ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)'};
   border-radius: 6px;
   cursor: pointer;
@@ -170,7 +172,10 @@ const CopyIcon = styled.span`
 `;
 
 // Add EntityID component
-const EntityID: React.FC<{ entityId: string; theme: 'light' | 'dark' }> = ({ entityId, theme }) => {
+const EntityID: React.FC<{ entityId: string; theme: 'light' | 'dark' }> = ({
+  entityId,
+  theme,
+}) => {
   const [showCopied, setShowCopied] = useState(false);
 
   const handleCopy = () => {
@@ -188,7 +193,6 @@ const EntityID: React.FC<{ entityId: string; theme: 'light' | 'dark' }> = ({ ent
     </EntityIDDisplay>
   );
 };
-
 
 // Add WalletConnectButton component before Navigation
 const WalletConnectButton: React.FC<{
@@ -241,17 +245,16 @@ export default function Navigation() {
   const { connect, connectors } = useConnect();
   const { address } = useAccount();
   const [showCopied, setShowCopied] = useState(false);
-  const jwtObject = getJWTObject();
-  const entityId = jwtObject?.executor_public_key;
 
-  
+  const userId = getUserID();
+
   const handleLogout = () => {
     clearAppEndpoint();
     clearJWT();
     clearApplicationId();
     navigate('/auth');
   };
-  
+
   const renderRoleSpecificButtons = () => {
     switch (userRole) {
       case 'patient':
@@ -298,11 +301,8 @@ export default function Navigation() {
     }
 
     return (
-      <WalletDropdown >
-        <NavButton
-          theme={theme}
-          onClick={() => setIsOpen(!isOpen)}
-        >
+      <WalletDropdown>
+        <NavButton theme={theme} onClick={() => setIsOpen(!isOpen)}>
           Connect Wallet
         </NavButton>
         <DropdownContent isOpen={isOpen} theme={theme}>
@@ -359,11 +359,11 @@ export default function Navigation() {
       </Nav>
     );
   }
-  
+
   const renderNavButtons = () => (
     <NavButtons>
       {renderRoleSpecificButtons()}
-      {entityId && <EntityID entityId={entityId} theme={theme} />}
+      {userId && <EntityID entityId={userId} theme={theme} />}
       {!address ? (
         <WalletConnectButton
           theme={theme}

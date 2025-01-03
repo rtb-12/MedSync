@@ -1,4 +1,5 @@
 # MedSync 🩺  
+![MedSyncLogo](docs/1DAAB133-2126-497C-8F9E-D7A712428177.png)
 MedSync is a **decentralized healthcare data management platform** designed to address the critical challenges of consent management, data access transparency, and incentivized data sharing. Built on **Starknet** and **Calimero**, MedSync seamlessly combines scalability, privacy, and security for healthcare data management in a hybrid blockchain architecture.
 
 ---
@@ -101,7 +102,7 @@ MedSync offers the perfect blend of blockchain capabilities to address healthcar
 ---
 
 ## 🔄 **App Flow**  
-![Untitled-2024-12-15-1727](docs/Untitled-2024-12-15-1727.png)
+![MedSyncArch](docs/MedSync.png)
 ---
 ### **Step 1:** Consent Management  
 1. Patients use the frontend to add, modify, or revoke consent for specific entities and purposes.  

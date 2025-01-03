@@ -1,12 +1,12 @@
-// src/pages/reward-pool/RewardPoolUser.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { Card, Button, Input } from '../../components/shared/Card';
 import { LoadingState } from '../../components/shared/LoadingState';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useContract } from '@starknet-react/core';
+import { useContract, useSendTransaction, useTransactionReceipt } from '@starknet-react/core';
 import { ABI } from '../../abi/Contract_ABI';
 import { HealthDataApi } from '../../api/healthDataApi';
+import { type Abi } from 'starknet';
 
 const DashboardWrapper = styled.div<{ theme: 'light' | 'dark' }>`
   min-height: 100vh;
@@ -57,10 +57,10 @@ const RewardBadge = styled.span<{ theme: 'light' | 'dark' }>`
 
 const StatusBadge = styled.span<{
   theme: 'light' | 'dark';
-  status: 'pending' | 'accepted' | 'rejected';
+  status: string;
 }>`
   background: ${({ status }) =>
-    status === 'accepted'
+    status === 'approved'
       ? '#10B981'
       : status === 'rejected'
         ? '#EF4444'
@@ -82,7 +82,6 @@ const StyledButton = styled(Button)<{ variant?: 'primary' | 'secondary' }>`
   margin-top: 1rem;
 `;
 
-// Add a modal component for showing the entity ID
 const Modal = styled.div<{ theme: 'light' | 'dark' }>`
   position: fixed;
   top: 50%;
@@ -129,7 +128,6 @@ const CopyButton = styled(Button)`
   min-width: 100px;
 `;
 
-// Update interface to match API response
 interface ResearchPool {
   created_at: number;
   description: string;
@@ -139,32 +137,16 @@ interface ResearchPool {
   title: string;
 }
 
-const MOCK_PARTICIPATING_POOLS: ResearchPool[] = [
-  {
-    entity_id: 'pool_004',
-    title: 'Diabetes Research',
-    description: 'Analysis of diabetes treatment effectiveness',
-    reward_amount: 350,
-    status: 'accepted',
-    created_at: 0,
-  },
-  {
-    entity_id: 'pool_005',
-    title: 'Mental Health Study',
-    description: 'Research on anxiety and depression patterns',
-    reward_amount: 250,
-    status: 'pending',
-    created_at: 0,
-  },
-  {
-    entity_id: 'pool_006',
-    title: 'Sleep Pattern Analysis',
-    description: 'Study on sleep disorders and treatments',
-    reward_amount: 200,
-    status: 'rejected',
-    created_at: 0,
-  },
-];
+interface PoolSubmission {
+  patient_id: string;
+  entity_id: string;
+  submitted_at: number;
+  status: string;
+}
+
+
+
+const contractAddress = '0x01fef8db26d72596018cb1783bb856123099b1a8efac4454c7976171612d0dba';
 
 export function RewardPoolUser() {
   const { theme } = useTheme();
@@ -173,6 +155,9 @@ export function RewardPoolUser() {
   const [participatingPools, setParticipatingPools] = useState<ResearchPool[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [selectedPool, setSelectedPool] = useState<ResearchPool | null>(null);
+  const [copyStatus, setCopyStatus] = useState('Copy');
+  const [participatingLoading, setParticipatingLoading] = useState(false);
+  const [selectedReward, setSelectedReward] = useState<ResearchPool | null>(null);
   const api = new HealthDataApi();
 
   useEffect(() => {
@@ -188,8 +173,7 @@ export function RewardPoolUser() {
           }));
           setAvailablePools(formattedPools);
         }
-        // Keep mock participating pools for now
-        setParticipatingPools(MOCK_PARTICIPATING_POOLS);
+
       } catch (err) {
         console.error('Failed to fetch research pools:', err);
       } finally {
@@ -200,56 +184,134 @@ export function RewardPoolUser() {
     fetchPools();
   }, []);
 
+  useEffect(() => {
+    const fetchParticipatingPools = async () => {
+      setParticipatingLoading(true);
+      try {
+        const result = await api.getPatientSubmissions();
+        if (result.data) {
+          const participatingPoolsData = result.data.map(submission => ({
+            entity_id: submission.entity_id,
+            title: availablePools.find(p => p.entity_id === submission.entity_id)?.title || 'Unknown Pool',
+            description: availablePools.find(p => p.entity_id === submission.entity_id)?.description || '',
+            reward_amount: availablePools.find(p => p.entity_id === submission.entity_id)?.reward_amount || 0,
+            status: submission.status,
+            created_at: submission.submitted_at,
+          }));
+          setParticipatingPools(participatingPoolsData);
+        }
+      } catch (err) {
+        console.error('Failed to fetch participating pools:', err);
+      } finally {
+        setParticipatingLoading(false);
+      }
+    };
+
+    fetchParticipatingPools();
+  }, [availablePools]);
+  const truncateForContract = (id: string): string => {
+    return id.substring(0, 31);
+  };
   const { contract } = useContract({
-    address: '0x123...', // Your contract address
-    abi: ABI,
+    address: contractAddress,
+    abi: ABI as Abi, 
+  });
+
+  const calls = useMemo(() => {
+    if (!contract || !selectedReward) return [];
+
+    // Convert reward amount to u256 compatible value
+    const amount = BigInt(Math.floor(selectedReward.reward_amount));
+
+    const truncatedId = truncateForContract(selectedReward.entity_id);
+
+  return [contract.populate('withdraw_reward', [
+    truncatedId,
+    amount
+  ])];
+  }, [contract, selectedReward]);
+
+  const {
+    send: writeAsync,
+    data: writeData,
+    isPending: writeIsPending,
+  } = useSendTransaction({
+    calls,
+  });
+
+  const {
+    data: waitData,
+    status: waitStatus,
+    isLoading: waitIsLoading,
+    isError: waitIsError,
+  } = useTransactionReceipt({
+    hash: writeData?.transaction_hash,
+    watch: true,
   });
 
   const handleClaimReward = async (entityId: string) => {
+    console.log('=== Claiming Reward ===');
+    console.log('Entity ID:', entityId);
+    
     setIsLoading(true);
     try {
-      // Call contract to claim reward
-      await contract.invoke('withdraw_reward', [entityId]);
-      // Update UI after successful claim
+      const pool = participatingPools.find(p => p.entity_id === entityId);
+      console.log('Selected Pool:', pool);
+      
+      if (!pool) {
+        throw new Error('Pool not found');
+      }
+
+      setSelectedReward(pool);
+      console.log('Reward Amount:', pool.reward_amount);
+      console.log('Contract Status:', contract ? 'Loaded' : 'Not Loaded');
+      
+      // Trigger transaction
+      console.log('Initiating Transaction...');
+      const tx = writeAsync();
+      console.log('Transaction Data:', tx);
+      
+      if (waitData?.transaction_hash) {
+        console.log('Transaction Hash:', waitData.transaction_hash);
+        console.log('Transaction Status:', waitStatus);
+        alert('Reward claimed successfully!');
+      }
+
     } catch (error) {
-      console.error('Failed to claim reward:', error);
+      console.error('Claim Reward Error:', error);
+      console.error('Error Details:', {
+        contract: !!contract,
+        selectedReward: !!selectedReward,
+        isPending: writeIsPending,
+        waitStatus
+      });
+      alert('Failed to claim reward. Please try again.');
     } finally {
       setIsLoading(false);
+      setSelectedReward(null);
     }
   };
+
   const handleCopyEntityId = (entityId: string) => {
     navigator.clipboard.writeText(entityId);
-    // Optional: Add a toast or notification here
+    setCopyStatus('Copied!');
+    setTimeout(() => setCopyStatus('Copy'), 2000);
   };
-  const handleParticipate = async (poolId: string) => {
-    try {
-      const pool = availablePools.find((p) => p.entity_id === poolId);
-      if (pool) {
-        setSelectedPool(pool);
-        setShowModal(true);
-        // Call API to submit to pool
-        const result = await api.submitToPool(pool.entity_id);
-        if (result.error) {
-          throw new Error(result.error.message);
-        }
-        // Update UI after successful submission
-        handleModalClose();
-      }
-    } catch (err) {
-      console.error('Failed to participate:', err);
-      alert('Failed to participate in pool');
+  const handleParticipate = (poolId: string) => {
+    const pool = availablePools.find((p) => p.entity_id === poolId);
+    if (pool) {
+      setSelectedPool(pool);
+      setShowModal(true);
     }
   };
   const handleModalClose = () => {
-    if (selectedPool) {
-      setParticipatingPools([
-        ...participatingPools,
-        { ...selectedPool, status: 'pending' },
-      ]);
-      setAvailablePools(availablePools.filter((p) => p.entity_id !== selectedPool.entity_id));
-    }
     setShowModal(false);
     setSelectedPool(null);
+  };
+
+  const formatEntityId = (id: string) => {
+    if (id.length <= 12) return id;
+    return `${id.slice(0, 6)}...${id.slice(-6)}`;
   };
 
   return (
@@ -280,28 +342,35 @@ export function RewardPoolUser() {
 
         <h2>Your Participating Research</h2>
         <ResearchGrid>
-          {participatingPools.map((pool) => (
-            <ResearchCard key={pool.entity_id} theme={theme}>
-              <h3>{pool.title}</h3>
-              <p>{pool.description}</p>
-              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                <RewardBadge theme={theme}>
-                  Reward: {pool.reward_amount} USD
-                </RewardBadge>
-                <StatusBadge theme={theme} status={pool.status}>
-                  {pool.status.charAt(0).toUpperCase() + pool.status.slice(1)}
-                </StatusBadge>
-              </div>
-              {pool.claimable && (
-                <StyledButton
-                  variant="primary"
-                  onClick={() => handleClaimReward(pool.entity_id)}
-                >
-                  Claim Reward
-                </StyledButton>
-              )}
-            </ResearchCard>
-          ))}
+          {participatingLoading ? (
+            <LoadingState />
+          ) : (
+            participatingPools.map((pool) => (
+              <ResearchCard key={pool.entity_id} theme={theme}>
+                <h3>{pool.title}</h3>
+                <p>{pool.description}</p>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <RewardBadge theme={theme}>
+                    Reward: {pool.reward_amount} STARK
+                  </RewardBadge>
+                  <StatusBadge theme={theme} status={pool.status.toLowerCase()}>
+                    {pool.status.charAt(0).toUpperCase() + pool.status.slice(1).toLowerCase()}
+                  </StatusBadge>
+                </div>
+                {pool.status.toLowerCase() === 'approved' && (
+                  <StyledButton
+                    variant="primary"
+                    onClick={() => handleClaimReward(pool.entity_id)}
+                    disabled={isLoading || writeIsPending || waitIsLoading}
+                  >
+                    {isLoading || writeIsPending ? 'Processing...' : 
+                     waitIsLoading ? 'Confirming...' : 
+                     'Claim Reward'}
+                  </StyledButton>
+                )}
+              </ResearchCard>
+            ))
+          )}
         </ResearchGrid>
 
         {showModal && selectedPool && (
@@ -311,11 +380,17 @@ export function RewardPoolUser() {
               <h3>Research Pool ID</h3>
               <p>Copy this ID to provide to the researcher:</p>
               <EntityIdDisplay theme={theme}>
-                <span>{selectedPool.entity_id}</span>
+                <span title={selectedPool.entity_id}>
+                  {formatEntityId(selectedPool.entity_id)}
+                </span>
                 <CopyButton
                   onClick={() => handleCopyEntityId(selectedPool.entity_id)}
+                  style={{ 
+                    background: copyStatus === 'Copied!' ? '#10B981' : '#3b82f6',
+                    transition: 'all 0.3s ease'
+                  }}
                 >
-                  Copy ID
+                  {copyStatus}
                 </CopyButton>
               </EntityIdDisplay>
               <StyledButton

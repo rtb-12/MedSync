@@ -157,7 +157,7 @@ export function AddRecordForm({ onRecordAdded }: Props) {
     setIsLoading(true);
 
     try {
-      // Convert record details to JSON string before encrypting
+
       const jsonData = JSON.stringify(recordDetails);
       const result = await api.storePatientData(
         new TextEncoder().encode(jsonData),

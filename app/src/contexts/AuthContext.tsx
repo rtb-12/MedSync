@@ -1,4 +1,3 @@
-// src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState } from 'react';
 
 interface AuthContextType {
@@ -43,7 +42,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Add useAuth hook
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

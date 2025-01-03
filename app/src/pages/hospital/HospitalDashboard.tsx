@@ -5,6 +5,7 @@ import { HealthDataApi } from '../../api/healthDataApi';
 import { PatientRecord } from '../../types/HealthTypes';
 import { LoadingState } from '../../components/shared/LoadingState';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getJWTObject } from '../../utils/storage';
 
 const CardStyles = `
   background: ${({ theme }) =>
@@ -122,6 +123,10 @@ const ErrorMessage = styled.div<{ theme: 'light' | 'dark' }>`
   margin-bottom: 1rem;
 `;
 
+const formatPatientId = (id: string) => {
+  if (id.length <= 10) return id;
+  return `${id.slice(0, 10)}.....${id.slice(-4)}`;
+};
 interface MedicalDetails {
   diagnosis: string;
   medications: string[];
@@ -133,6 +138,50 @@ interface MedicalDetails {
   doctorName: string;
 }
 
+const IdContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const CopyButton = styled.button`
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  color: ${({ theme }) => theme === 'light' ? '#6B7280' : '#9CA3AF'};
+
+  &:hover {
+    color: ${({ theme }) => theme === 'light' ? '#374151' : '#E5E7EB'};
+  }
+`;
+
+const PatientIdDisplay = ({ id }: { id: string }) => {
+  const [copied, setCopied] = useState(false);
+  const { theme } = useTheme();
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <IdContainer>
+      <span title={id}>{formatPatientId(id)}</span>
+      <CopyButton 
+        onClick={handleCopy}
+        title={copied ? 'Copied!' : 'Copy ID'}
+        theme={theme}
+      >
+        {copied ? '✓' : '📋'}
+      </CopyButton>
+    </IdContainer>
+  );
+};
+
 export function HospitalDashboard() {
   const { theme } = useTheme();
   const [authorizedRecords, setAuthorizedRecords] = useState<PatientRecord[]>(
@@ -142,6 +191,7 @@ export function HospitalDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [patientId, setPatientId] = useState('');
   const api = new HealthDataApi();
+  const jwtObject = getJWTObject();
 
   const parseMedicalDetails = (data: string): MedicalDetails | null => {
     try {
@@ -275,7 +325,9 @@ export function HospitalDashboard() {
                         <div className="detail-section">
                           <h5>Record Details</h5>
                           <p><strong>Date:</strong> {medicalDetails.date}</p>
-                          <p><strong>Patient ID:</strong> {record.owner_id}</p>
+                          <p title={record.owner_id}>
+                            <strong>Patient ID:</strong> <PatientIdDisplay id={record.owner_id} />
+                          </p>
                           <p><strong>Status:</strong> {record.is_anonymized ? 'Anonymized' : 'Private'}</p>
                         </div>
                       </div>
@@ -288,7 +340,7 @@ export function HospitalDashboard() {
                         try {
                           const result = await api.accessPatientData(
                             record.owner_id,
-                            record.owner_id
+                            jwtObject.executor_public_key
                           );
                           if (result.error) {
                             setError(result.error.message);
